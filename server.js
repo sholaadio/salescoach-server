@@ -7,6 +7,7 @@ const FormData = require("form-data");
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
+// Allow requests from anywhere (frontend is a static site)
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
@@ -72,10 +73,9 @@ app.post("/analyze", async (req, res) => {
       body: JSON.stringify({
         model: "claude-sonnet-4-20250514",
         max_tokens: 1200,
-        messages: [
-          {
-            role: "user",
-            content: `You are an expert Nigerian sales call coach for a wellness ecommerce company (payment-on-delivery). This closer is a ${desc}
+        messages: [{
+          role: "user",
+          content: `You are an expert Nigerian sales call coach for a wellness ecommerce company (payment-on-delivery). This closer is a ${desc}
 
 Analyze this call. Return ONLY valid JSON — no markdown, no backticks.
 
@@ -86,9 +86,8 @@ TRANSCRIPT:
 ${transcript}
 
 JSON:
-{"overallScore":<0-100>,"closingRate":"<e.g.70%>","callDuration":"<e.g.4m30s>","verdict":"<1 punchy sentence>","languageNote":"<languages + code-switching>","metrics":[{"label":"Opening & Rapport","score":<0-100>},{"label":"Needs Discovery","score":<0-100>},{"label":"Product Pitch","score":<0-100>},{"label":"Objection Handling","score":<0-100>},{"label":"Urgency Creation","score":<0-100>},{"label":"Close Attempt","score":<0-100>}],"strengths":["<specific>","<specific>","<specific>"],"weaknesses":["<specific>","<specific>","<specific>"],"improvements":["<actionable with example>","<actionable>","<actionable>"],"transcriptInsight":"<critical missed moment + what should have been said>","scriptSuggestion":"<2-4 line script in natural Nigerian sales English>","resources":{"books":[{"title":"<title by author>","reason":"<why>"},{"title":"<title>","reason":"<why>"}],"youtube":[{"title":"<search term>","reason":"<why>"},{"title":"<search term>","reason":"<why>"}],"podcasts":[{"title":"<podcast name>","reason":"<why>"},{"title":"<podcast name>","reason":"<why>"}]}}`,
-          },
-        ],
+{"overallScore":<0-100>,"closingRate":"<e.g.70%>","callDuration":"<e.g.4m30s>","verdict":"<1 punchy sentence>","languageNote":"<languages + code-switching>","metrics":[{"label":"Opening & Rapport","score":<0-100>},{"label":"Needs Discovery","score":<0-100>},{"label":"Product Pitch","score":<0-100>},{"label":"Objection Handling","score":<0-100>},{"label":"Urgency Creation","score":<0-100>},{"label":"Close Attempt","score":<0-100>}],"strengths":["<specific>","<specific>","<specific>"],"weaknesses":["<specific>","<specific>","<specific>"],"improvements":["<actionable with example>","<actionable>","<actionable>"],"transcriptInsight":"<critical missed moment + what should have been said>","scriptSuggestion":"<2-4 line script in natural Nigerian sales English>","resources":{"books":[{"title":"<title by author>","reason":"<why>"},{"title":"<title>","reason":"<why>"}],"youtube":[{"title":"<search term>","reason":"<why>"},{"title":"<search term>","reason":"<why>"}],"podcasts":[{"title":"<podcast name>","reason":"<why>"},{"title":"<podcast name>","reason":"<why>"}]}}`
+        }],
       }),
     });
 
