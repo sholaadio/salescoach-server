@@ -38,7 +38,7 @@ app.get("/", (req, res) => {
 // ─── USERS ────────────────────────────────────────────────────────────────────
 app.get("/users", async (req, res) => {
   try {
-    const data = await sb("sc_users?select=*&order=created_at.asc");
+    const data = await sb("sc_users?select=*&order="createdAt".asc");
     res.json(data);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -110,7 +110,7 @@ app.post("/teams/bulk", async (req, res) => {
 // ─── DAILY LOGS ───────────────────────────────────────────────────────────────
 app.get("/logs", async (req, res) => {
   try {
-    const data = await sb("sc_logs?select=*&order=submitted_at.desc");
+    const data = await sb('sc_logs?select=*&order="submittedAt".desc');
     res.json(data);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -179,7 +179,7 @@ app.delete("/reports/:id", async (req, res) => {
 // ─── NO ANSWERS ───────────────────────────────────────────────────────────────
 app.get("/noanswers", async (req, res) => {
   try {
-    const data = await sb("sc_noanswers?select=*&order=created_at.desc");
+    const data = await sb("sc_noanswers?select=*&order="createdAt".desc");
     res.json(data);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
