@@ -1,0 +1,1537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <title>SalesCoach AI — HealthPlus Nigeria</title>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="SalesCoach"/>
+  <meta name="theme-color" content="#060A12"/>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { background:#060A12; font-family:'DM Sans','Segoe UI',sans-serif; -webkit-tap-highlight-color:transparent; }
+    input, select, textarea, button { font-family:inherit; }
+    ::-webkit-scrollbar { width:4px; } 
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:999px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
+
+
+// ─── STORAGE ──────────────────────────────────────────────────────────────────
+const sk = k => `hplus3-${k}`;
+async function storeGet(k) { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : null; } catch { return null; } }
+async function storeSet(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+
+// ─── SEED DATA ────────────────────────────────────────────────────────────────
+const SEED_USERS = {
+  ceo001: { id:"ceo001", name:"Mr Shola Adio",       pin:"0001", role:"ceo",           teamId:null },
+  gm001:  { id:"gm001",  name:"Mr Samuel Amuda",      pin:"0002", role:"gm",            teamId:null },
+  hos001: { id:"hos001", name:"Lady Victory Friday",  pin:"0003", role:"head_sales",    teamId:null },
+  hoc001: { id:"hoc001", name:"Mr Okoro Kennedy",     pin:"0004", role:"head_creative", teamId:null },
+  hr001:  { id:"hr001",  name:"Lady Victoria",        pin:"0005", role:"hr",            teamId:null },
+  tl001:  { id:"tl001",  name:"Lady Abigail",         pin:"1001", role:"teamlead",      teamId:"team1" },
+  tl002:  { id:"tl002",  name:"Lady Mary",            pin:"1002", role:"teamlead",      teamId:"team2" },
+  tl003:  { id:"tl003",  name:"Lady Deborah",         pin:"1003", role:"teamlead",      teamId:"team3" },
+  tl004:  { id:"tl004",  name:"Lady Tiwalade",        pin:"1004", role:"teamlead",      teamId:"team4" },
+  tl005:  { id:"tl005",  name:"Mr Kelvin",            pin:"1005", role:"teamlead",      teamId:"team5" },
+  c001:   { id:"c001",   name:"Chukwuemeka Obi",      pin:"2001", role:"closer",        teamId:"team1" },
+  c002:   { id:"c002",   name:"Fatima Aliyu",         pin:"2002", role:"closer",        teamId:"team1" },
+  c003:   { id:"c003",   name:"Segun Adeyemi",        pin:"2003", role:"closer",        teamId:"team2" },
+  c004:   { id:"c004",   name:"Ngozi Eze",            pin:"2004", role:"closer",        teamId:"team2" },
+  c005:   { id:"c005",   name:"Amaka Okonkwo",        pin:"2005", role:"closer",        teamId:"team3" },
+  c006:   { id:"c006",   name:"Tunde Bakare",         pin:"2006", role:"closer",        teamId:"team3" },
+  c007:   { id:"c007",   name:"Blessing Nwosu",       pin:"2007", role:"closer",        teamId:"team4" },
+  c008:   { id:"c008",   name:"Emeka Eze",            pin:"2008", role:"closer",        teamId:"team4" },
+};
+const SEED_TEAMS = {
+  team1: { id:"team1", name:"Team Abigail",    leadId:"tl001", type:"sales" },
+  team2: { id:"team2", name:"Team Mary",       leadId:"tl002", type:"sales" },
+  team3: { id:"team3", name:"Team Deborah",    leadId:"tl003", type:"sales" },
+  team4: { id:"team4", name:"Follow-Up Team",  leadId:"tl004", type:"followup" },
+  team5: { id:"team5", name:"Social Media Team", leadId:"tl005", type:"socialmedia" },
+};
+
+async function seedIfEmpty() { const u = await storeGet("users"); if (!u) { await storeSet("users", SEED_USERS); await storeSet("teams", SEED_TEAMS); } }
+async function getUsers()  { return (await storeGet("users"))   || SEED_USERS; }
+async function getTeams()  { return (await storeGet("teams"))   || SEED_TEAMS; }
+async function saveUsers(u){ await storeSet("users", u); }
+async function saveTeams(t){ await storeSet("teams", t); }
+async function getReports(){ return (await storeGet("reports")) || []; }
+async function addReport(r){ const a = await getReports(); await storeSet("reports", [r,...a].slice(0,2000)); }
+async function getDailyLogs(){ return (await storeGet("dlogs")) || []; }
+async function saveDailyLog(log){ const a = await getDailyLogs(); const i = a.findIndex(l=>l.id===log.id); if(i>=0) a[i]=log; else a.unshift(log); await storeSet("dlogs", a.slice(0,3000)); }
+async function getNoAnswers(){ return (await storeGet("noanswer")) || []; }
+async function addNoAnswer(r){ const a = await getNoAnswers(); await storeSet("noanswer", [r,...a].slice(0,3000)); }
+
+// ─── COMMISSION ENGINES ───────────────────────────────────────────────────────
+
+// Standard closer commission
+function calcSalesCommission(assigned, delivered, upsells=0, repeats=0, referrals=0) {
+  const a=Math.max(+assigned||0,0), d=+delivered||0;
+  if (a===0) return { rate:0, perOrder:0, base:0, upsellBonus:0, repeatBonus:0, referralBonus:0, total:0, tier:"none", upsellLocked:true, followupCount:0, teamType:"sales" };
+  const rate = (d/a)*100;
+  let perOrder=0, tier="none";
+  if (rate>=90) { perOrder=200; tier="gold"; }
+  else if (rate>=65) { perOrder=150; tier="silver"; }
+  else if (rate>=50) { perOrder=100; tier="bronze"; }
+  const base = d*perOrder;
+  const upsellLocked = rate<50;
+  const upsellBonus = upsellLocked ? 0 : (+upsells||0)*600;
+  const repeatBonus = (+repeats||0)*300;
+  const referralBonus = (+referrals||0)*300;
+  const followupCount = Math.max(0, d-a);
+  return { rate:Math.round(rate), perOrder, base, upsellBonus, repeatBonus, referralBonus, total:base+upsellBonus+repeatBonus+referralBonus, tier, upsellLocked, followupCount, teamType:"sales" };
+}
+
+// Follow-Up team: callsMade → callsThrough (=assigned) → delivered. Upsell ALWAYS active.
+function calcFollowupCommission(callsMade, callsThrough, delivered, upsells=0, repeats=0, referrals=0) {
+  const a=Math.max(+callsThrough||0,0), d=+delivered||0;
+  if (a===0) return { rate:0, perOrder:0, base:0, upsellBonus:0, repeatBonus:0, referralBonus:0, total:0, tier:"none", upsellLocked:false, callsMade:+callsMade||0, callsThrough:a, teamType:"followup" };
+  const rate=(d/a)*100;
+  let perOrder=0, tier="none";
+  if (rate>=90) { perOrder=200; tier="gold"; }
+  else if (rate>=65) { perOrder=150; tier="silver"; }
+  else if (rate>=50) { perOrder=100; tier="bronze"; }
+  const base=d*perOrder;
+  const upsellBonus=(+upsells||0)*600; // always active — no lock
+  const repeatBonus=(+repeats||0)*300;
+  const referralBonus=(+referrals||0)*300;
+  return { rate:Math.round(rate), perOrder, base, upsellBonus, repeatBonus, referralBonus, total:base+upsellBonus+repeatBonus+referralBonus, tier, upsellLocked:false, callsMade:+callsMade||0, callsThrough:a, teamType:"followup" };
+}
+
+// Social Media team: flat ₦200/delivered, everything split equally among members
+function calcSocialCommission(leadsContacted, leadsConfirmed, delivered, upsells=0, repeats=0, referrals=0, memberCount=1) {
+  const a=Math.max(+leadsConfirmed||0,0), d=+delivered||0, mc=Math.max(memberCount,1);
+  const rate=a>0?Math.round((d/a)*100):0;
+  const base=d*200; // flat ₦200 regardless of rate
+  const upsellBonus=(+upsells||0)*600; // always active
+  const repeatBonus=(+repeats||0)*300;
+  const referralBonus=(+referrals||0)*300;
+  const totalPool=base+upsellBonus+repeatBonus+referralBonus;
+  const perMember=Math.floor(totalPool/mc);
+  return { rate, base, upsellBonus, repeatBonus, referralBonus, totalPool, perMember, memberCount:mc, leadsContacted:+leadsContacted||0, leadsConfirmed:a, upsellLocked:false, tier:"flat", teamType:"socialmedia" };
+}
+
+// ─── HELPERS ──────────────────────────────────────────────────────────────────
+const uid = () => Math.random().toString(36).slice(2,9);
+const scoreColor = s => s>=80?"#00E5A0":s>=60?"#FFB627":"#FF6B6B";
+const tierColor  = t => ({gold:"#FFB627",silver:"#9CA3AF",bronze:"#CD7C2F",none:"#5A6A80",flat:"#60A5FA"})[t]||"#5A6A80";
+const fmtDate    = d => new Date(d).toLocaleDateString("en-NG",{day:"numeric",month:"short",year:"numeric"});
+const fmtNaira   = n => `₦${Number(n||0).toLocaleString()}`;
+const todayStr   = () => new Date().toISOString().slice(0,10);
+const ROLE_LABELS = { ceo:"CEO", gm:"General Manager", head_sales:"Head of Sales", head_creative:"Head of Creative", hr:"HR Manager", teamlead:"Team Lead", closer:"Sales Closer" };
+const outcomeColor = o => ({confirmed:"#00E5A0",cancelled:"#FF6B6B",followup:"#FFB627",switchedoff:"#5A6A80",callback:"#A78BFA",unknown:"#5A6A80"})[o]||"#5A6A80";
+const outcomeLabel = o => ({confirmed:"✅ Confirmed",cancelled:"❌ Cancelled",followup:"🔄 Follow-up",switchedoff:"📵 Switched Off",callback:"⏰ Call Back",unknown:"🤷 Unknown"})[o]||"Unknown";
+const teamTypeIcon = t => ({sales:"💼",followup:"🔄",socialmedia:"📱"})[t]||"💼";
+
+function filterByPeriod(items, field, period) {
+  const now=new Date();
+  return items.filter(item=>{
+    const d=new Date(item[field]);
+    if(period==="day") return d.toDateString()===now.toDateString();
+    if(period==="week"){ const w=new Date(now); w.setDate(now.getDate()-7); return d>=w; }
+    if(period==="month") return d.getMonth()===now.getMonth()&&d.getFullYear()===now.getFullYear();
+    if(period==="year") return d.getFullYear()===now.getFullYear();
+    return true;
+  });
+}
+function filterLogsByPeriod(logs, period) {
+  const now=new Date();
+  return logs.filter(l=>{
+    const d=new Date(l.date);
+    if(period==="day") return l.date===todayStr();
+    if(period==="week"){ const w=new Date(now); w.setDate(now.getDate()-7); return d>=w; }
+    if(period==="month") return l.date?.slice(0,7)===now.toISOString().slice(0,7);
+    if(period==="year") return l.date?.slice(0,4)===String(now.getFullYear());
+    return true;
+  });
+}
+function getWeeklyRate(logs, closerId) {
+  const wl=filterLogsByPeriod(logs.filter(l=>l.closerId===closerId&&l.status==="approved"),"week");
+  const a=wl.reduce((s,l)=>s+(+(l.callsThrough||l.assigned)||0),0);
+  const d=wl.reduce((s,l)=>s+(+l.delivered||0),0);
+  return a>0?Math.round((d/a)*100):null;
+}
+
+// ─── DESIGN ───────────────────────────────────────────────────────────────────
+const C = { bg:"#060A12", surface:"rgba(255,255,255,0.03)", border:"rgba(255,255,255,0.07)", green:"#00E5A0", yellow:"#FFB627", red:"#FF6B6B", purple:"#A78BFA", blue:"#60A5FA", pink:"#F472B6", text:"#E8EDF5", muted:"#5A6A80", soft:"#B8C5D6" };
+const accent = role => ({ ceo:"#FFB627", gm:"#A78BFA", head_sales:"#00E5A0", head_creative:"#60A5FA", hr:"#F472B6", teamlead:"#00E5A0", closer:"#00E5A0" })[role]||C.green;
+const S = {
+  card:   { background:C.surface, border:`1px solid ${C.border}`, borderRadius:16, padding:22, marginBottom:18 },
+  label:  { display:"block", fontSize:10, fontWeight:700, color:C.muted, textTransform:"uppercase", letterSpacing:"0.07em", marginBottom:6 },
+  input:  { width:"100%", background:"rgba(255,255,255,0.05)", border:"1px solid rgba(255,255,255,0.09)", borderRadius:10, padding:"10px 13px", color:C.text, fontSize:13, outline:"none", boxSizing:"border-box", fontFamily:"inherit" },
+  select: { width:"100%", background:"#0E1520", border:"1px solid rgba(255,255,255,0.09)", borderRadius:10, padding:"10px 13px", color:C.text, fontSize:13, outline:"none", boxSizing:"border-box", fontFamily:"inherit" },
+  btn:    { background:`linear-gradient(135deg,${C.green},#00B37D)`, color:"#060A12", border:"none", borderRadius:11, padding:"11px 24px", fontWeight:800, fontSize:13, cursor:"pointer" },
+  btnGhost:  { background:"transparent", color:C.green, border:`1px solid rgba(0,229,160,0.22)`, borderRadius:11, padding:"9px 18px", fontWeight:600, fontSize:12, cursor:"pointer" },
+  btnDanger: { background:"transparent", color:C.red, border:`1px solid rgba(255,107,107,0.22)`, borderRadius:11, padding:"9px 18px", fontWeight:600, fontSize:12, cursor:"pointer" },
+  btnGold:   { background:"linear-gradient(135deg,#FFB627,#E09000)", color:"#060A12", border:"none", borderRadius:11, padding:"11px 24px", fontWeight:800, fontSize:13, cursor:"pointer" },
+  pill: c => ({ display:"inline-block", padding:"2px 10px", borderRadius:20, background:`${c}18`, color:c, fontSize:11, fontWeight:700 }),
+  accentTop: c => ({ position:"absolute", top:0, left:0, right:0, height:2, background:`linear-gradient(90deg,${c},transparent)`, borderRadius:"16px 16px 0 0" }),
+  th: { textAlign:"left", padding:"10px 14px", fontSize:11, fontWeight:600, color:C.muted, textTransform:"uppercase", letterSpacing:"0.07em", borderBottom:`1px solid ${C.border}` },
+  td: { padding:"12px 14px", fontSize:13, color:C.soft, borderBottom:`1px solid rgba(255,255,255,0.04)` },
+  g2: { display:"grid", gridTemplateColumns:"1fr 1fr", gap:13 },
+  g3: { display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:13 },
+  g4: { display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:16 },
+};
+
+// ─── PERIOD FILTER ────────────────────────────────────────────────────────────
+function PeriodFilter({ value, onChange }) {
+  return (
+    <div style={{ display:"flex",gap:6,flexWrap:"wrap",marginBottom:16 }}>
+      {[{v:"day",l:"Today"},{v:"week",l:"This Week"},{v:"month",l:"This Month"},{v:"year",l:"This Year"},{v:"all",l:"All Time"}].map(o=>(
+        <button key={o.v} onClick={()=>onChange(o.v)} style={{ background:value===o.v?"rgba(0,229,160,0.15)":"rgba(255,255,255,0.04)", color:value===o.v?C.green:C.muted, border:`1px solid ${value===o.v?"rgba(0,229,160,0.3)":"rgba(255,255,255,0.07)"}`, borderRadius:8, padding:"5px 13px", fontSize:11, fontWeight:600, cursor:"pointer" }}>{o.l}</button>
+      ))}
+    </div>
+  );
+}
+
+// ─── PERFORMANCE WARNING ──────────────────────────────────────────────────────
+function PerformanceWarning({ logs, userId }) {
+  const rate=getWeeklyRate(logs, userId);
+  if(rate===null||rate>=60||new Date().getDay()<3) return null;
+  return (
+    <div style={{ background:"rgba(255,107,107,0.08)",border:"1px solid rgba(255,107,107,0.35)",borderRadius:14,padding:"14px 18px",marginBottom:18,display:"flex",gap:12,alignItems:"flex-start" }}>
+      <div style={{ fontSize:22 }}>🚨</div>
+      <div>
+        <div style={{ fontSize:13,fontWeight:800,color:C.red,marginBottom:3 }}>Performance Red Flag — This Week</div>
+        <div style={{ fontSize:12,color:"#FF9999",lineHeight:1.65 }}>Your delivery rate this week is <strong>{rate}%</strong> — below the 60% minimum. Please speak with your team lead and focus on improving your follow-up and confirmation rate before the week ends.</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SCORE RING ───────────────────────────────────────────────────────────────
+function ScoreRing({ score, size=100, stroke=9 }) {
+  const r=(size-stroke*2)/2, circ=2*Math.PI*r, color=scoreColor(score);
+  return (
+    <div style={{ position:"relative",width:size,height:size,flexShrink:0 }}>
+      <svg width={size} height={size} style={{ transform:"rotate(-90deg)",position:"absolute" }}>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth={stroke}/>
+        <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth={stroke} strokeDasharray={circ} strokeDashoffset={circ*(1-score/100)} strokeLinecap="round" style={{ transition:"stroke-dashoffset 1.2s ease" }}/>
+      </svg>
+      <div style={{ position:"absolute",inset:0,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center" }}>
+        <span style={{ fontSize:size*0.25,fontWeight:900,color:C.text,lineHeight:1 }}>{score}</span>
+        <span style={{ fontSize:size*0.11,color:C.muted,marginTop:2 }}>/100</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── COMMISSION CARD ──────────────────────────────────────────────────────────
+function CommissionCard({ comm, label="Today's Commission" }) {
+  if (!comm) return null;
+  const isSocial = comm.teamType==="socialmedia";
+  const isFollowup = comm.teamType==="followup";
+  const mainColor = isSocial ? C.pink : tierColor(comm.tier);
+  return (
+    <div style={{ ...S.card,position:"relative",overflow:"hidden",background:`${mainColor}08`,border:`1px solid ${mainColor}33`,marginBottom:18 }}>
+      <div style={S.accentTop(mainColor)}/>
+      <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:14 }}>
+        <div>
+          <div style={{ fontSize:11,color:C.muted,textTransform:"uppercase",letterSpacing:"0.07em",fontWeight:700,marginBottom:4 }}>{label}</div>
+          {isSocial ? (
+            <>
+              <div style={{ fontSize:14,color:C.muted,marginBottom:2 }}>Team Pool</div>
+              <div style={{ fontSize:30,fontWeight:900,color:C.pink,letterSpacing:"-1px" }}>{fmtNaira(comm.totalPool)}</div>
+              <div style={{ fontSize:18,fontWeight:800,color:C.text,marginTop:4 }}>Your Share: <span style={{ color:C.pink }}>{fmtNaira(comm.perMember)}</span></div>
+              <div style={{ fontSize:11,color:C.muted,marginTop:2 }}>Split equally among {comm.memberCount} members</div>
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize:30,fontWeight:900,color:mainColor,letterSpacing:"-1px" }}>{fmtNaira(comm.total)}</div>
+              {isFollowup && <div style={{ fontSize:12,color:C.muted,marginTop:3 }}>Based on {comm.callsThrough} calls through of {comm.callsMade} made</div>}
+            </>
+          )}
+          <div style={{ fontSize:10,color:C.muted,marginTop:4 }}>Paid with salary at end of month</div>
+          <div style={{ marginTop:8,display:"flex",gap:8,flexWrap:"wrap" }}>
+            <span style={S.pill(comm.rate>=90?C.green:comm.rate>=50?C.yellow:C.red)}>{comm.rate}% {isSocial?"conversion":"delivery"} rate</span>
+            {!isSocial && <span style={S.pill(mainColor)}>{comm.tier==="gold"?"🥇 Gold":comm.tier==="silver"?"🥈 Silver":comm.tier==="bronze"?"🥉 Bronze":comm.tier==="flat"?"📱 Flat Rate":"No Commission"}</span>}
+            {comm.followupCount>0 && <span style={S.pill(C.blue)}>+{comm.followupCount} follow-up deliveries</span>}
+            {comm.upsellLocked && <span style={S.pill(C.red)}>🔒 Upsell locked (below 50%)</span>}
+          </div>
+        </div>
+        <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:8 }}>
+          {[
+            {l:isSocial?"Base Pool":"Base Pay",    v:fmtNaira(comm.base||comm.totalPool-comm.upsellBonus-comm.repeatBonus-comm.referralBonus), c:C.text},
+            {l:"Upsell (₦600)",    v:comm.upsellLocked?"🔒 Locked":fmtNaira(comm.upsellBonus),   c:comm.upsellLocked?C.muted:C.green},
+            {l:"Repeat (₦300)",    v:fmtNaira(comm.repeatBonus),   c:C.purple},
+            {l:"Referral (₦300)",  v:fmtNaira(comm.referralBonus), c:C.blue},
+          ].map(x=>(
+            <div key={x.l} style={{ background:"rgba(255,255,255,0.04)",borderRadius:10,padding:"8px 10px",textAlign:"center" }}>
+              <div style={{ fontSize:9,color:C.muted,marginBottom:2,textTransform:"uppercase",letterSpacing:"0.06em" }}>{x.l}</div>
+              <div style={{ fontSize:14,fontWeight:800,color:x.c }}>{x.v}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── REPORT MODAL ─────────────────────────────────────────────────────────────
+function ReportModal({ report, onClose }) {
+  const { analysis, closerName, callType, callOutcome, product, date } = report;
+  return (
+    <div style={{ position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,0.85)",backdropFilter:"blur(6px)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"24px 16px",overflowY:"auto",fontFamily:"'DM Sans','Segoe UI',sans-serif" }}>
+      <div style={{ width:"100%",maxWidth:900,background:"#0C1320",borderRadius:20,border:`1px solid ${C.border}`,overflow:"hidden" }}>
+        <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 24px",borderBottom:`1px solid ${C.border}`,background:"rgba(0,229,160,0.04)" }}>
+          <div>
+            <div style={{ fontSize:16,fontWeight:800,color:C.text }}>{closerName} — AI Coach Report</div>
+            <div style={{ fontSize:12,color:C.muted,marginTop:2 }}>{callType==="whatsapp"?"💬 WhatsApp":"📞 Phone"} · {product||"—"} · {fmtDate(date)}</div>
+          </div>
+          <div style={{ display:"flex",gap:10,alignItems:"center" }}>
+            <span style={S.pill(outcomeColor(callOutcome))}>{outcomeLabel(callOutcome)}</span>
+            <button onClick={onClose} style={{ background:"rgba(255,255,255,0.06)",border:"none",borderRadius:8,padding:"6px 14px",color:C.soft,cursor:"pointer",fontSize:13 }}>✕ Close</button>
+          </div>
+        </div>
+        <div style={{ padding:24 }}>
+          <div style={{ background:"rgba(0,229,160,0.05)",border:"1px solid rgba(0,229,160,0.12)",borderRadius:12,padding:"12px 16px",marginBottom:20,fontSize:13,color:C.soft,lineHeight:1.7 }}>
+            <strong style={{ color:C.green }}>🧠 Verdict: </strong>{analysis.verdict}
+          </div>
+          <div style={{ display:"grid",gridTemplateColumns:"200px 1fr",gap:18 }}>
+            <div>
+              <div style={{ ...S.card,textAlign:"center",paddingTop:20 }}>
+                <div style={{ fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10 }}>Score</div>
+                <div style={{ display:"flex",justifyContent:"center",marginBottom:14 }}><ScoreRing score={analysis.overallScore} size={96} stroke={9}/></div>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:7 }}>
+                  {[{l:"Close Rate",v:analysis.closingRate},{l:"Duration",v:analysis.callDuration}].map(x=>(
+                    <div key={x.l} style={{ background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"8px 6px" }}>
+                      <div style={{ fontSize:9,color:C.muted,marginBottom:2 }}>{x.l}</div>
+                      <div style={{ fontSize:13,fontWeight:800,color:C.text }}>{x.v}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={S.card}>
+                <div style={{ fontSize:11,fontWeight:700,color:C.text,marginBottom:12 }}>Skill Breakdown</div>
+                {(analysis.metrics||[]).map(m=>(
+                  <div key={m.label} style={{ marginBottom:10 }}>
+                    <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
+                      <span style={{ fontSize:10,color:"#8A9BB5" }}>{m.label}</span>
+                      <span style={{ fontSize:10,fontWeight:800,color:scoreColor(m.score) }}>{m.score}</span>
+                    </div>
+                    <div style={{ height:4,background:"rgba(255,255,255,0.06)",borderRadius:999 }}>
+                      <div style={{ width:`${m.score}%`,height:"100%",background:scoreColor(m.score),borderRadius:999,transition:"width 1s ease" }}/>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div style={{ ...S.card,background:"rgba(0,229,160,0.03)",border:"1px solid rgba(0,229,160,0.1)" }}>
+                <div style={{ fontSize:10,fontWeight:700,color:C.green,marginBottom:5 }}>🇳🇬 Language</div>
+                <div style={{ fontSize:11,color:C.muted,lineHeight:1.65 }}>{analysis.languageNote}</div>
+              </div>
+            </div>
+            <div>
+              <div style={{ ...S.g3,marginBottom:14 }}>
+                {[{icon:"💪",title:"Strengths",items:analysis.strengths,color:C.green},{icon:"⚠️",title:"Weaknesses",items:analysis.weaknesses,color:C.red},{icon:"🎯",title:"Action Steps",items:analysis.improvements,color:C.yellow}].map(sec=>(
+                  <div key={sec.title} style={{ ...S.card,position:"relative",overflow:"hidden",paddingTop:18 }}>
+                    <div style={S.accentTop(sec.color)}/>
+                    <div style={{ fontSize:11,fontWeight:800,color:sec.color,marginBottom:10 }}>{sec.icon} {sec.title}</div>
+                    {(sec.items||[]).map((item,i)=>(
+                      <div key={i} style={{ display:"flex",gap:6,marginBottom:9 }}>
+                        <div style={{ width:2.5,minWidth:2.5,borderRadius:999,background:sec.color,marginTop:4 }}/>
+                        <div style={{ fontSize:11,color:"#A8B8CC",lineHeight:1.65 }}>{item}</div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div style={{ ...S.card,background:"rgba(255,182,39,0.04)",border:"1px solid rgba(255,182,39,0.14)",marginBottom:12 }}>
+                <div style={{ fontSize:11,fontWeight:800,color:C.yellow,marginBottom:8 }}>📝 Critical Moment</div>
+                <div style={{ fontSize:12,color:"#C8B88A",lineHeight:1.8,background:"rgba(0,0,0,0.25)",borderRadius:8,padding:"11px 13px",fontStyle:"italic" }}>{analysis.transcriptInsight}</div>
+              </div>
+              <div style={{ ...S.card,background:"rgba(124,58,237,0.05)",border:"1px solid rgba(124,58,237,0.18)",marginBottom:12 }}>
+                <div style={{ fontSize:11,fontWeight:800,color:C.purple,marginBottom:8 }}>💬 Memorize This Script</div>
+                <div style={{ fontSize:12,color:"#C4B5FD",lineHeight:1.8,fontFamily:"'Courier New',monospace",background:"rgba(0,0,0,0.3)",borderRadius:8,padding:"11px 13px",whiteSpace:"pre-wrap" }}>{analysis.scriptSuggestion}</div>
+              </div>
+              {analysis.resources&&(
+                <div style={{ ...S.card,background:"rgba(96,165,250,0.05)",border:"1px solid rgba(96,165,250,0.18)" }}>
+                  <div style={{ fontSize:11,fontWeight:800,color:C.blue,marginBottom:10 }}>📚 AI-Recommended Learning Resources</div>
+                  <div style={{ fontSize:11,color:C.muted,marginBottom:10,fontStyle:"italic" }}>Based on your weaknesses in this call:</div>
+                  {["books","youtube","podcasts"].map(type=>(
+                    analysis.resources[type]?.length>0&&(
+                      <div key={type} style={{ marginBottom:10 }}>
+                        <div style={{ fontSize:10,fontWeight:700,color:C.soft,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.07em" }}>{type==="books"?"📖 Books":type==="youtube"?"▶️ YouTube":"🎙️ Podcasts"}</div>
+                        {analysis.resources[type].map((x,i)=>(
+                          <div key={i} style={{ display:"flex",gap:8,marginBottom:7 }}>
+                            <span style={{ color:C.blue,fontSize:12 }}>▸</span>
+                            <div><div style={{ fontSize:12,fontWeight:700,color:C.text }}>{x.title}</div><div style={{ fontSize:11,color:C.muted }}>{x.reason}</div></div>
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── BACKEND SERVER ─────────────────────────────────────────────────────────────────────────────
+const SERVER_URL = "https://salescoach-server.onrender.com";
+
+async function transcribeAudio(audioFile) {
+  const formData = new FormData();
+  formData.append("audio", audioFile);
+  const res = await fetch(`${SERVER_URL}/transcribe`, { method:"POST", body:formData });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || `Transcription failed (${res.status})`);
+  return data.transcript;
+}
+
+async function analyzeWithClaude({ transcript, closerName, callType, callOutcome, product, teamType }) {
+  const res = await fetch(`${SERVER_URL}/analyze`, {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({ transcript, closerName, callType, callOutcome, product, teamType }),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data?.error || `Analysis failed (${res.status})`);
+  return data.analysis;
+}
+
+// ─── DAILY LOG FORMS ──────────────────────────────────────────────────────────
+
+// Standard sales closer log
+function SalesDailyLogForm({ user, onSaved, existingLog }) {
+  const [form,setForm]=useState({ date:existingLog?.date||todayStr(), assigned:existingLog?.assigned||"", confirmed:existingLog?.confirmed||"", delivered:existingLog?.delivered||"", upsells:existingLog?.upsells||"", repeats:existingLog?.repeats||"", referrals:existingLog?.referrals||"", notes:existingLog?.notes||"" });
+  const [saving,setSaving]=useState(false);
+  const set=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const comm=calcSalesCommission(+form.assigned||0,+form.delivered||0,+form.upsells||0,+form.repeats||0,+form.referrals||0);
+  const followupCount=Math.max(0,(+form.delivered||0)-(+form.assigned||0));
+  const save=async()=>{
+    setSaving(true);
+    const log={id:existingLog?.id||uid(),closerId:user.id,closerName:user.name,teamId:user.teamId,teamType:"sales",date:form.date,...Object.fromEntries(Object.entries(form).map(([k,v])=>[k,isNaN(v)||v===""?v:+v])),commission:comm,status:"pending",submittedAt:Date.now()};
+    await saveDailyLog(log); setSaving(false); onSaved&&onSaved(log);
+  };
+  return (
+    <div style={S.card}>
+      <div style={{ fontSize:14,fontWeight:700,color:C.text,marginBottom:14 }}>📋 Daily Order Log</div>
+      <div style={{ ...S.g3,marginBottom:14 }}>
+        {[{k:"assigned",l:"Orders Assigned"},{k:"confirmed",l:"Orders Confirmed"},{k:"delivered",l:"Orders Delivered"}].map(f=>(
+          <div key={f.k}><label style={S.label}>{f.l}</label><input style={S.input} type="number" min="0" placeholder="0" value={form[f.k]} onChange={e=>set(f.k,e.target.value)}/></div>
+        ))}
+        {[{k:"upsells",l:"Upsells (₦600 if ≥50%)"},{k:"repeats",l:"Repeat Customers (₦300)"},{k:"referrals",l:"Referrals Converted (₦300)"}].map(f=>(
+          <div key={f.k}><label style={S.label}>{f.l}</label><input style={S.input} type="number" min="0" placeholder="0" value={form[f.k]} onChange={e=>set(f.k,e.target.value)}/></div>
+        ))}
+        <div><label style={S.label}>Notes</label><input style={S.input} placeholder="Any notes..." value={form.notes} onChange={e=>set("notes",e.target.value)}/></div>
+      </div>
+      {followupCount>0&&<div style={{ background:"rgba(96,165,250,0.08)",border:"1px solid rgba(96,165,250,0.2)",borderRadius:10,padding:"9px 13px",marginBottom:12,fontSize:12,color:C.blue }}>📦 <strong>+{followupCount} follow-up deliveries</strong> included — carry-overs confirmed and delivered today.</div>}
+      {+form.assigned>0&&(
+        <div style={{ background:"rgba(255,182,39,0.05)",border:"1px solid rgba(255,182,39,0.15)",borderRadius:12,padding:"11px 16px",marginBottom:14,display:"flex",gap:14,flexWrap:"wrap",alignItems:"center" }}>
+          <span style={{ fontSize:11,color:C.muted }}>Rate: <strong style={{ color:tierColor(comm.tier) }}>{comm.rate}%</strong></span>
+          <span style={{ fontSize:11,color:C.muted }}>Est. Commission: <strong style={{ color:tierColor(comm.tier) }}>{fmtNaira(comm.total)}</strong></span>
+          <span style={S.pill(tierColor(comm.tier))}>{comm.tier==="gold"?"🥇 Gold":comm.tier==="silver"?"🥈 Silver":comm.tier==="bronze"?"🥉 Bronze":"Below Target"}</span>
+          {comm.upsellLocked&&<span style={S.pill(C.red)}>🔒 Upsell locked — below 50%</span>}
+          <span style={{ fontSize:10,color:C.muted }}>Pending approval · Paid end of month</span>
+        </div>
+      )}
+      <button style={S.btn} onClick={save} disabled={saving}>{saving?"Saving...":"📤 Submit Daily Log"}</button>
+    </div>
+  );
+}
+
+// Follow-Up team log: calls made → calls through → delivered
+function FollowupDailyLogForm({ user, onSaved, existingLog }) {
+  const [form,setForm]=useState({ date:existingLog?.date||todayStr(), callsMade:existingLog?.callsMade||"", callsThrough:existingLog?.callsThrough||"", delivered:existingLog?.delivered||"", upsells:existingLog?.upsells||"", repeats:existingLog?.repeats||"", referrals:existingLog?.referrals||"", notes:existingLog?.notes||"" });
+  const [saving,setSaving]=useState(false);
+  const set=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const comm=calcFollowupCommission(+form.callsMade||0,+form.callsThrough||0,+form.delivered||0,+form.upsells||0,+form.repeats||0,+form.referrals||0);
+  const save=async()=>{
+    setSaving(true);
+    const log={id:existingLog?.id||uid(),closerId:user.id,closerName:user.name,teamId:user.teamId,teamType:"followup",date:form.date,...Object.fromEntries(Object.entries(form).map(([k,v])=>[k,isNaN(v)||v===""?v:+v])),commission:comm,status:"pending",submittedAt:Date.now()};
+    await saveDailyLog(log); setSaving(false); onSaved&&onSaved(log);
+  };
+  return (
+    <div style={S.card}>
+      <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:14 }}>
+        <div style={{ fontSize:14,fontWeight:700,color:C.text }}>📋 Daily Follow-Up Log</div>
+        <span style={S.pill(C.purple)}>🔄 Follow-Up Team Rules</span>
+      </div>
+      <div style={{ background:"rgba(167,139,250,0.07)",border:"1px solid rgba(167,139,250,0.15)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#C4B5FD",lineHeight:1.7 }}>
+        <strong>How this works:</strong> "Calls Through" = your assigned orders. Commission is based on Delivered ÷ Calls Through. Upsell, repeat, and referral bonuses are always active — no delivery rate restriction.
+      </div>
+      <div style={{ ...S.g3,marginBottom:14 }}>
+        {[{k:"callsMade",l:"Total Calls Made"},{k:"callsThrough",l:"Calls That Went Through (= Assigned)"},{k:"delivered",l:"Orders Delivered"}].map(f=>(
+          <div key={f.k}><label style={S.label}>{f.l}</label><input style={S.input} type="number" min="0" placeholder="0" value={form[f.k]} onChange={e=>set(f.k,e.target.value)}/></div>
+        ))}
+        {[{k:"upsells",l:"Upsells (₦600 — always active)"},{k:"repeats",l:"Repeat Customers (₦300)"},{k:"referrals",l:"Referrals Converted (₦300)"}].map(f=>(
+          <div key={f.k}><label style={S.label}>{f.l}</label><input style={S.input} type="number" min="0" placeholder="0" value={form[f.k]} onChange={e=>set(f.k,e.target.value)}/></div>
+        ))}
+        <div><label style={S.label}>Notes</label><input style={S.input} placeholder="Any notes..." value={form.notes} onChange={e=>set("notes",e.target.value)}/></div>
+      </div>
+      {+form.callsThrough>0&&(
+        <div style={{ background:"rgba(167,139,250,0.06)",border:"1px solid rgba(167,139,250,0.2)",borderRadius:12,padding:"11px 16px",marginBottom:14,display:"flex",gap:14,flexWrap:"wrap",alignItems:"center" }}>
+          <span style={{ fontSize:11,color:C.muted }}>{form.callsMade} calls made</span>
+          <span style={{ fontSize:11,color:C.muted }}>{form.callsThrough} went through</span>
+          <span style={{ fontSize:11,color:C.muted }}>Rate: <strong style={{ color:tierColor(comm.tier) }}>{comm.rate}%</strong></span>
+          <span style={{ fontSize:11,color:C.muted }}>Est. Commission: <strong style={{ color:tierColor(comm.tier) }}>{fmtNaira(comm.total)}</strong></span>
+          <span style={S.pill(tierColor(comm.tier))}>{comm.tier==="gold"?"🥇 Gold":comm.tier==="silver"?"🥈 Silver":comm.tier==="bronze"?"🥉 Bronze":"Below Target"}</span>
+          <span style={{ fontSize:10,color:C.green }}>✅ Upsell always active</span>
+        </div>
+      )}
+      <button style={S.btn} onClick={save} disabled={saving}>{saving?"Saving...":"📤 Submit Follow-Up Log"}</button>
+    </div>
+  );
+}
+
+// Social Media team log — submitted by Mr Kelvin for the whole team
+function SocialMediaTeamLogForm({ user, users, teams, onSaved, existingLog }) {
+  const teamMembers=Object.values(users).filter(u=>u.teamId===user.teamId);
+  const memberCount=teamMembers.length;
+  const [form,setForm]=useState({ date:existingLog?.date||todayStr(), leadsContacted:existingLog?.leadsContacted||"", leadsConfirmed:existingLog?.leadsConfirmed||"", delivered:existingLog?.delivered||"", upsells:existingLog?.upsells||"", repeats:existingLog?.repeats||"", referrals:existingLog?.referrals||"", notes:existingLog?.notes||"" });
+  const [saving,setSaving]=useState(false);
+  const set=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const comm=calcSocialCommission(+form.leadsContacted||0,+form.leadsConfirmed||0,+form.delivered||0,+form.upsells||0,+form.repeats||0,+form.referrals||0,memberCount);
+  const save=async()=>{
+    setSaving(true);
+    const log={id:existingLog?.id||uid(),closerId:user.id,closerName:user.name,teamId:user.teamId,teamType:"socialmedia",date:form.date,...Object.fromEntries(Object.entries(form).map(([k,v])=>[k,isNaN(v)||v===""?v:+v])),commission:comm,memberCount,teamMembers:teamMembers.map(m=>m.id),status:"approved",approvedBy:user.id,approvedAt:Date.now(),submittedAt:Date.now()};
+    await saveDailyLog(log); setSaving(false); onSaved&&onSaved(log);
+  };
+  return (
+    <div style={S.card}>
+      <div style={{ display:"flex",alignItems:"center",gap:10,marginBottom:14 }}>
+        <div style={{ fontSize:14,fontWeight:700,color:C.text }}>📋 Team Daily Log</div>
+        <span style={S.pill(C.pink)}>📱 Social Media Team</span>
+        <span style={S.pill(C.blue)}>{memberCount} members</span>
+      </div>
+      <div style={{ background:"rgba(244,114,182,0.07)",border:"1px solid rgba(244,114,182,0.15)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#FDA4C4",lineHeight:1.7 }}>
+        <strong>Team commission pool:</strong> Flat ₦200 per delivered order + all bonuses. Total is split equally among all {memberCount} team members. You submit this for the whole team. Log is auto-approved.
+      </div>
+      <div style={{ ...S.g3,marginBottom:14 }}>
+        {[{k:"leadsContacted",l:"Total Leads Contacted"},{k:"leadsConfirmed",l:"Leads Confirmed / Spoke To (= Assigned)"},{k:"delivered",l:"Orders Delivered"}].map(f=>(
+          <div key={f.k}><label style={S.label}>{f.l}</label><input style={S.input} type="number" min="0" placeholder="0" value={form[f.k]} onChange={e=>set(f.k,e.target.value)}/></div>
+        ))}
+        {[{k:"upsells",l:"Upsells (₦600 each — always active)"},{k:"repeats",l:"Repeat Customers (₦300 each)"},{k:"referrals",l:"Referrals Converted (₦300 each)"}].map(f=>(
+          <div key={f.k}><label style={S.label}>{f.l}</label><input style={S.input} type="number" min="0" placeholder="0" value={form[f.k]} onChange={e=>set(f.k,e.target.value)}/></div>
+        ))}
+        <div><label style={S.label}>Notes</label><input style={S.input} placeholder="Any notes..." value={form.notes} onChange={e=>set("notes",e.target.value)}/></div>
+      </div>
+      {+form.leadsConfirmed>0&&(
+        <div style={{ background:"rgba(244,114,182,0.06)",border:"1px solid rgba(244,114,182,0.2)",borderRadius:12,padding:"12px 16px",marginBottom:14 }}>
+          <div style={{ display:"flex",gap:14,flexWrap:"wrap",alignItems:"center",marginBottom:8 }}>
+            <span style={{ fontSize:11,color:C.muted }}>Conversion: <strong style={{ color:C.pink }}>{comm.rate}%</strong></span>
+            <span style={{ fontSize:11,color:C.muted }}>Team Pool: <strong style={{ color:C.pink }}>{fmtNaira(comm.totalPool)}</strong></span>
+            <span style={{ fontSize:11,color:C.muted }}>Each Member Gets: <strong style={{ color:C.text }}>{fmtNaira(comm.perMember)}</strong></span>
+            <span style={S.pill(C.pink)}>{memberCount} members split equally</span>
+          </div>
+          <div style={{ display:"flex",gap:14,flexWrap:"wrap",fontSize:11,color:C.muted }}>
+            <span>Base: {fmtNaira(+form.delivered*200)}</span>
+            <span>Upsell: {fmtNaira((+form.upsells||0)*600)}</span>
+            <span>Repeat: {fmtNaira((+form.repeats||0)*300)}</span>
+            <span>Referral: {fmtNaira((+form.referrals||0)*300)}</span>
+          </div>
+        </div>
+      )}
+      {/* Team member preview */}
+      <div style={{ ...S.card,background:"rgba(0,0,0,0.2)",margin:"0 0 14px" }}>
+        <div style={{ fontSize:11,fontWeight:700,color:C.text,marginBottom:10 }}>Members who will receive {fmtNaira(comm.perMember)} each:</div>
+        <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>
+          {teamMembers.map(m=>(
+            <div key={m.id} style={{ background:"rgba(244,114,182,0.1)",border:"1px solid rgba(244,114,182,0.2)",borderRadius:8,padding:"5px 12px",fontSize:12,color:C.pink,fontWeight:600 }}>{m.name.split(" ")[0]}</div>
+          ))}
+        </div>
+      </div>
+      <button style={{ ...S.btn,background:`linear-gradient(135deg,${C.pink},#DB2777)` }} onClick={save} disabled={saving}>{saving?"Saving...":"📤 Submit Team Log (Auto-Approved)"}</button>
+    </div>
+  );
+}
+
+// ─── NO ANSWER FORM ───────────────────────────────────────────────────────────
+function NoAnswerForm({ user, onSaved }) {
+  const [form,setForm]=useState({orderId:"",customerName:"",reason:"switchedoff",attempts:"1",callback:"",notes:""});
+  const [saving,setSaving]=useState(false);
+  const set=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const save=async()=>{ setSaving(true); await addNoAnswer({id:uid(),closerId:user.id,closerName:user.name,teamId:user.teamId,date:Date.now(),...form}); setSaving(false); setForm({orderId:"",customerName:"",reason:"switchedoff",attempts:"1",callback:"",notes:""}); onSaved&&onSaved(); };
+  return (
+    <div style={S.card}>
+      <div style={{ fontSize:14,fontWeight:700,color:C.text,marginBottom:14 }}>📵 Log No-Answer Call</div>
+      <div style={S.g2}>
+        <div><label style={S.label}>Order ID</label><input style={S.input} placeholder="e.g. ORD-4821" value={form.orderId} onChange={e=>set("orderId",e.target.value)}/></div>
+        <div><label style={S.label}>Customer Name</label><input style={S.input} placeholder="Customer name" value={form.customerName} onChange={e=>set("customerName",e.target.value)}/></div>
+        <div><label style={S.label}>Reason</label>
+          <select style={S.select} value={form.reason} onChange={e=>set("reason",e.target.value)}>
+            <option value="switchedoff">📵 Switched Off</option><option value="notreachable">📴 Not Reachable</option>
+            <option value="busy">📶 Line Busy</option><option value="nopickup">🔕 No Pickup</option><option value="wrongnumber">❌ Wrong Number</option>
+          </select>
+        </div>
+        <div><label style={S.label}>Attempts</label>
+          <select style={S.select} value={form.attempts} onChange={e=>set("attempts",e.target.value)}>
+            {["1","2","3","4","5+"].map(v=><option key={v} value={v}>{v} attempt{v!=="1"?"s":""}</option>)}
+          </select>
+        </div>
+        <div><label style={S.label}>Schedule Callback (optional)</label><input style={S.input} type="datetime-local" value={form.callback} onChange={e=>set("callback",e.target.value)}/></div>
+        <div><label style={S.label}>Notes</label><input style={S.input} placeholder="Additional notes..." value={form.notes} onChange={e=>set("notes",e.target.value)}/></div>
+      </div>
+      <button style={{ ...S.btn,marginTop:14 }} onClick={save} disabled={saving}>{saving?"Saving...":"Log No-Answer"}</button>
+    </div>
+  );
+}
+
+// ─── CALL UPLOAD ────────────────────────────────────────────────────────────────────────────────
+function CallUploadSection({ user, teams, refresh }) {
+  const [callType,setCallType]=useState("phone");
+  const [callOutcome,setCallOutcome]=useState("unknown");
+  const [product,setProduct]=useState("");
+  const [audioFile,setAudioFile]=useState(null);
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState("");
+  const [status,setStatus]=useState("");
+  const [progress,setProgress]=useState(0);
+  const fileRef=useRef();
+  const teamType=teams[user.teamId]?.type||"sales";
+
+  const fileSizeMB = audioFile ? (audioFile.size/1024/1024).toFixed(1) : null;
+  const fileOk = audioFile && audioFile.size < 25*1024*1024;
+
+  const handleFile = e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    if (f.size > 25*1024*1024) { setError(`File too large (${(f.size/1024/1024).toFixed(1)}MB). Max is 25MB. Please compress or trim the recording.`); return; }
+    setAudioFile(f); setError("");
+  };
+
+  const submit = async () => {
+    if (!audioFile) { setError("Please select an audio file."); return; }
+    setError(""); setLoading(true); setProgress(5);
+    try {
+      setStatus("🎙️ Transcribing audio with Whisper AI..."); setProgress(10);
+      const transcript = await transcribeAudio(audioFile);
+      setProgress(45); setStatus("✅ Transcription done! Analyzing with Claude...");
+      const steps=["🔍 Detecting language...","📊 Scoring performance...","✍️ Writing coaching report...","📚 Finding learning resources..."];
+      let si=0; const sv=setInterval(()=>{ si=Math.min(si+1,steps.length-1); setStatus(steps[si]); setProgress(p=>Math.min(p+10,90)); },2200);
+      const analysis = await analyzeWithClaude({transcript,closerName:user.name,callType,callOutcome,product,teamType});
+      clearInterval(sv); setProgress(95);
+      await addReport({ id:uid(), closerId:user.id, closerName:user.name, teamId:user.teamId, teamType, date:Date.now(), callType, callOutcome, product, audioFileName:audioFile.name, transcript, analysis });
+      await refresh();
+      setLoading(false); setProgress(0); setStatus("");
+      setAudioFile(null); setProduct(""); setCallOutcome("unknown");
+      if (fileRef.current) fileRef.current.value = "";
+    } catch(e) {
+      setLoading(false); setProgress(0); setStatus("");
+      setError(e.message || "Something went wrong. Try again.");
+    }
+  };
+
+  if (loading) return (
+    <div style={{ ...S.card,textAlign:"center",padding:"44px 24px" }}>
+      <style>{`@keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}} @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.5}}`}</style>
+      <div style={{ fontSize:44,display:"inline-block",animation:"spin 2.5s linear infinite",marginBottom:16 }}>{progress<45?"🎙️":"🤖"}</div>
+      <div style={{ fontSize:15,fontWeight:800,color:C.text,marginBottom:6 }}>{status}</div>
+      <div style={{ fontSize:12,color:C.muted,marginBottom:20 }}>{progress<45?"Whisper is converting your audio to text...":"Claude is reading the transcript and building your report..."}</div>
+      <div style={{ maxWidth:320,margin:"0 auto" }}>
+        <div style={{ height:6,background:"rgba(255,255,255,0.06)",borderRadius:999,overflow:"hidden" }}>
+          <div style={{ width:`${progress}%`,height:"100%",background:`linear-gradient(90deg,${C.green},#00B37D)`,borderRadius:999,transition:"width 0.6s ease" }}/>
+        </div>
+        <div style={{ display:"flex",justifyContent:"space-between",marginTop:8,fontSize:10,color:C.muted }}>
+          <span style={{ color:progress>=10?C.green:C.muted }}>🎙️ Transcribe</span>
+          <span style={{ color:progress>=45?C.green:C.muted }}>🤖 Analyze</span>
+          <span style={{ color:progress>=90?C.green:C.muted }}>📊 Report</span>
+        </div>
+      </div>
+      <div style={{ marginTop:16,fontSize:11,color:C.muted,animation:"pulse 2s ease infinite" }}>This takes 30–90 seconds for a 5–15 min call</div>
+    </div>
+  );
+
+  return (
+    <div style={S.card}>
+      {error&&<div style={{ background:"rgba(255,107,107,0.08)",border:"1px solid rgba(255,107,107,0.2)",borderRadius:10,padding:"10px 13px",marginBottom:14,fontSize:12,color:"#FF8080",lineHeight:1.6 }}>⚠️ {error}</div>}
+      <div style={{ ...S.g2,marginBottom:14 }}>
+        <div><label style={S.label}>Call Type</label>
+          <select style={S.select} value={callType} onChange={e=>setCallType(e.target.value)}>
+            <option value="phone">📞 Phone Call</option>
+            <option value="whatsapp">💬 WhatsApp Call</option>
+          </select>
+        </div>
+        <div><label style={S.label}>Product Pitched</label>
+          <input style={S.input} placeholder="e.g. Weight Loss Bundle" value={product} onChange={e=>setProduct(e.target.value)}/>
+        </div>
+        <div style={{ gridColumn:"span 2" }}><label style={S.label}>Call Outcome</label>
+          <select style={S.select} value={callOutcome} onChange={e=>setCallOutcome(e.target.value)}>
+            <option value="unknown">🤷 Unknown</option>
+            <option value="confirmed">✅ Confirmed — Customer agreed to receive order</option>
+            <option value="cancelled">❌ Cancelled — Customer declined</option>
+            <option value="followup">🔄 Follow-up — Needs another call</option>
+            <option value="callback">⏰ Call Back — Customer asked to call later</option>
+          </select>
+        </div>
+      </div>
+      <label style={S.label}>Call Recording</label>
+      <div onClick={()=>fileRef.current?.click()} style={{ border:`2px dashed ${audioFile?C.green:"rgba(255,255,255,0.12)"}`,borderRadius:14,padding:"28px 20px",textAlign:"center",cursor:"pointer",background:audioFile?"rgba(0,229,160,0.04)":"rgba(255,255,255,0.02)",transition:"all 0.2s",marginBottom:14 }}>
+        <input ref={fileRef} type="file" accept="audio/*,.mp3,.m4a,.wav,.ogg,.aac,.mp4" style={{ display:"none" }} onChange={handleFile}/>
+        {audioFile ? (
+          <div>
+            <div style={{ fontSize:28,marginBottom:8 }}>🎵</div>
+            <div style={{ fontSize:13,fontWeight:700,color:C.green,marginBottom:3 }}>{audioFile.name}</div>
+            <div style={{ fontSize:11,color:C.muted,marginBottom:8 }}>{fileSizeMB}MB · {audioFile.type||"audio file"}</div>
+            <div style={{ display:"flex",justifyContent:"center",gap:8 }}>
+              <span style={S.pill(C.green)}>✅ Ready to transcribe</span>
+              <span style={{ ...S.pill(C.muted),cursor:"pointer" }} onClick={e=>{e.stopPropagation();setAudioFile(null);if(fileRef.current)fileRef.current.value="";}}>✕ Remove</span>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div style={{ fontSize:32,marginBottom:10 }}>🎙️</div>
+            <div style={{ fontSize:13,fontWeight:700,color:C.text,marginBottom:4 }}>Tap to upload your call recording</div>
+            <div style={{ fontSize:11,color:C.muted,lineHeight:1.7 }}>Supports MP3, M4A, WAV, AAC, OGG · Max 25MB<br/>Whisper AI will transcribe it automatically</div>
+          </div>
+        )}
+      </div>
+      <button style={{ ...S.btn,opacity:(!audioFile||!fileOk)?0.45:1,width:"100%",padding:"13px",fontSize:14 }} onClick={submit} disabled={!audioFile||!fileOk}>
+        🎙️ → 🤖 Transcribe & Analyze Call
+      </button>
+    </div>
+  );
+}
+// ─── CLOSER PORTAL ────────────────────────────────────────────────────────────
+function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, onLogout, refresh }) {
+  const [tab,setTab]=useState("dashboard"); const [period,setPeriod]=useState("month");
+  const [viewReport,setViewReport]=useState(null); const [saved,setSaved]=useState("");
+  const myTeam=teams[user.teamId]; const teamType=myTeam?.type||"sales";
+  const myReports=filterByPeriod(allReports.filter(r=>r.closerId===user.id),"date",period).sort((a,b)=>b.date-a.date);
+  const allMyReports=allReports.filter(r=>r.closerId===user.id);
+  const myLogs=allLogs.filter(l=>l.closerId===user.id).sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const todayLog=myLogs.find(l=>l.date===todayStr());
+  const filteredLogs=filterLogsByPeriod(myLogs.filter(l=>l.status==="approved"),period);
+  const totalCalls=allMyReports.length;
+  const avgScore=totalCalls>0?Math.round(allMyReports.reduce((s,r)=>s+(r.analysis?.overallScore||0),0)/totalCalls):0;
+  const periodEarnings=teamType==="socialmedia"?filteredLogs.reduce((s,l)=>s+(l.commission?.perMember||0),0):filteredLogs.reduce((s,l)=>s+(l.commission?.total||0),0);
+  const pAssigned=filteredLogs.reduce((s,l)=>s+(+(l.callsThrough||l.leadsConfirmed||l.assigned)||0),0);
+  const pDelivered=filteredLogs.reduce((s,l)=>s+(+l.delivered||0),0);
+  const pRate=pAssigned>0?Math.round((pDelivered/pAssigned)*100):0;
+  const nb=(id,lbl)=><button onClick={()=>setTab(id)} style={{ background:tab===id?"rgba(0,229,160,0.1)":"transparent",color:tab===id?C.green:"#6A7A90",border:"none",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:500,cursor:"pointer" }}>{lbl}</button>;
+
+  const renderLogForm = () => {
+    if(teamType==="followup") return <FollowupDailyLogForm user={user} existingLog={todayLog} onSaved={async()=>{ await refresh(); setSaved("log"); setTimeout(()=>setSaved(""),3000); }}/>;
+    return <SalesDailyLogForm user={user} existingLog={todayLog} onSaved={async()=>{ await refresh(); setSaved("log"); setTimeout(()=>setSaved(""),3000); }}/>;
+  };
+
+  return (
+    <div style={{ minHeight:"100vh",background:C.bg,color:C.text,fontFamily:"'DM Sans','Segoe UI',sans-serif" }}>
+      <div style={{ position:"fixed",inset:0,zIndex:0,pointerEvents:"none",backgroundImage:`linear-gradient(rgba(0,229,160,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,160,0.015) 1px,transparent 1px)`,backgroundSize:"44px 44px" }}/>
+      <nav style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 24px",height:56,background:"rgba(6,10,18,0.97)",borderBottom:`1px solid rgba(0,229,160,0.1)`,position:"sticky",top:0,zIndex:100,backdropFilter:"blur(16px)" }}>
+        <div style={{ display:"flex",alignItems:"center",gap:9 }}>
+          <div style={{ width:30,height:30,borderRadius:8,background:`linear-gradient(135deg,${C.green},#00B37D)`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:12,color:"#060A12" }}>SC</div>
+          <div><div style={{ fontSize:13,fontWeight:800 }}>SalesCoach AI</div><div style={{ fontSize:9,color:C.green,textTransform:"uppercase",letterSpacing:"0.1em",fontWeight:600 }}>{teamTypeIcon(teamType)} {myTeam?.name}</div></div>
+        </div>
+        <div style={{ display:"flex",gap:3 }}>{nb("dashboard","📊 Dashboard")}{nb("upload","🎙️ Upload Call")}{nb("log","📋 Daily Log")}{teamType!=="socialmedia"&&nb("noanswer","📵 No Answer")}{nb("history","🕐 History")}</div>
+        <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+          <div style={{ textAlign:"right" }}><div style={{ fontSize:12,fontWeight:700 }}>{user.name}</div><div style={{ fontSize:9,color:C.muted }}>Sales Closer</div></div>
+          <button onClick={onLogout} style={{ background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 10px",color:C.muted,cursor:"pointer",fontSize:11 }}>Sign Out</button>
+        </div>
+      </nav>
+      <main style={{ maxWidth:1100,margin:"0 auto",padding:"28px 20px",position:"relative",zIndex:1 }}>
+        {tab==="dashboard"&&(
+          <div>
+            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>Hey {user.name.split(" ")[0]} 👋</h1>
+            <p style={{ fontSize:13,color:C.muted,marginBottom:16 }}>{teamTypeIcon(teamType)} {myTeam?.name}</p>
+            <PerformanceWarning logs={allLogs} userId={user.id}/>
+            <PeriodFilter value={period} onChange={setPeriod}/>
+            {todayLog&&<CommissionCard comm={todayLog.commission} label="Today's Commission"/>}
+            <div style={{ ...S.g4,marginBottom:20 }}>
+              {[
+                {l:"Total Calls",v:totalCalls,c:C.green},
+                {l:"Avg AI Score",v:avgScore||"—",c:scoreColor(avgScore)},
+                {l:"Period Earnings",v:fmtNaira(periodEarnings),c:C.yellow,sub:teamType==="socialmedia"?"Your share of team pool":"Paid with salary"},
+                {l:teamType==="followup"?"Calls Through Rate":"Delivery Rate",v:`${pRate}%`,c:pRate>=90?C.green:pRate>=50?C.yellow:C.red},
+              ].map((s,i)=>(
+                <div key={i} style={{ ...S.card,position:"relative",overflow:"hidden",marginBottom:0 }}>
+                  <div style={S.accentTop(s.c)}/>
+                  <div style={{ fontSize:10,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:700 }}>{s.l}</div>
+                  <div style={{ fontSize:26,fontWeight:900,marginTop:6 }}>{s.v}</div>
+                  {s.sub&&<div style={{ fontSize:10,color:C.muted,marginTop:2 }}>{s.sub}</div>}
+                </div>
+              ))}
+            </div>
+            {/* Commission rules reminder */}
+            <div style={{ ...S.card,background:"rgba(0,0,0,0.2)",marginBottom:16 }}>
+              <div style={{ fontSize:12,fontWeight:700,color:C.text,marginBottom:8 }}>💰 Your Commission Rules</div>
+              {teamType==="followup"&&(
+                <div style={{ fontSize:12,color:C.muted,lineHeight:1.8 }}>
+                  🔄 Rate = Delivered ÷ Calls Through (not total calls made)<br/>
+                  🥇 90%+ → ₦200/order · 🥈 65–89% → ₦150 · 🥉 50–64% → ₦100 · Below 50% → ₦0 base<br/>
+                  ✅ Upsell ₦600 always active · Repeat ₦300 · Referral ₦300 (no restrictions)
+                </div>
+              )}
+              {teamType==="socialmedia"&&(
+                <div style={{ fontSize:12,color:C.muted,lineHeight:1.8 }}>
+                  📱 Rate = Delivered ÷ Leads Confirmed · Flat ₦200/delivered order<br/>
+                  ✅ Upsell ₦600 always active · Repeat ₦300 · Referral ₦300<br/>
+                  👥 All amounts split equally among all team members · Mr Kelvin submits team log
+                </div>
+              )}
+              {teamType==="sales"&&(
+                <div style={{ fontSize:12,color:C.muted,lineHeight:1.8 }}>
+                  🥇 90%+ → ₦200/delivered · 🥈 65–89% → ₦150 · 🥉 50–64% → ₦100 · Below 50% → ₦0<br/>
+                  ⚡ Upsell ₦600 (only if delivery rate ≥50%) · Repeat ₦300 · Referral ₦300
+                </div>
+              )}
+            </div>
+            {/* Excellence pool — only for sales teams */}
+            {teamType!=="socialmedia"&&(
+              <div style={{ ...S.card,background:"rgba(255,182,39,0.04)",border:"1px solid rgba(255,182,39,0.15)" }}>
+                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10 }}>
+                  <div><div style={{ fontSize:13,fontWeight:700,color:C.yellow,marginBottom:3 }}>🏆 Monthly Excellence Pool</div><div style={{ fontSize:12,color:C.muted }}>Hit 90%+ delivery rate all month to qualify. Manager splits pool with salary.</div></div>
+                  <div style={{ textAlign:"center" }}><div style={{ fontSize:28,fontWeight:900,color:pRate>=90?C.green:C.yellow }}>{pRate}%</div><span style={S.pill(pRate>=90?C.green:C.yellow)}>{pRate>=90?"✅ Qualified!":"Need 90%+"}</span></div>
+                </div>
+                <div style={{ marginTop:12,height:8,background:"rgba(255,255,255,0.06)",borderRadius:999 }}><div style={{ width:`${Math.min(pRate,100)}%`,height:"100%",background:pRate>=90?`linear-gradient(90deg,${C.green},#00B37D)`:`linear-gradient(90deg,${C.yellow},#E09000)`,borderRadius:999,transition:"width 1s" }}/></div>
+              </div>
+            )}
+          </div>
+        )}
+        {tab==="upload"&&(
+          <div>
+            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>🎙️ Upload a Call</h1>
+            <p style={{ fontSize:13,color:C.muted,marginBottom:20 }}>Paste your transcript — Claude AI will coach you and recommend learning resources</p>
+            <CallUploadSection user={user} teams={teams} refresh={refresh}/>
+          </div>
+        )}
+        {tab==="log"&&(
+          <div>
+            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>📋 Daily Log</h1>
+            {saved==="log"&&<div style={{ background:"rgba(0,229,160,0.1)",border:"1px solid rgba(0,229,160,0.2)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:C.green }}>✅ Log submitted! {teamType==="socialmedia"?"Auto-approved.":"Waiting for team lead approval."}</div>}
+            {teamType==="socialmedia"?(
+              <div style={{ ...S.card,textAlign:"center",padding:"30px 20px",color:C.muted }}>
+                <div style={{ fontSize:28,marginBottom:10 }}>📱</div>
+                <div style={{ fontSize:14,fontWeight:700,color:C.text,marginBottom:6 }}>Team Log is submitted by Mr Kelvin</div>
+                <div style={{ fontSize:12 }}>As a Social Media Team member, your commission share will appear on your dashboard once the team lead submits the daily log.</div>
+              </div>
+            ) : renderLogForm()}
+            {myLogs.length>1&&teamType!=="socialmedia"&&(
+              <div style={S.card}>
+                <div style={{ fontSize:13,fontWeight:700,marginBottom:12 }}>Past Logs</div>
+                <table style={{ width:"100%",borderCollapse:"collapse" }}>
+                  <thead><tr>{["Date",teamType==="followup"?"Calls Through":"Assigned","Delivered","Rate","Commission","Status"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+                  <tbody>{myLogs.slice(1,8).map(l=>(
+                    <tr key={l.id}>
+                      <td style={S.td}>{l.date}</td>
+                      <td style={S.td}>{l.callsThrough||l.assigned}</td>
+                      <td style={S.td}>{l.delivered}</td>
+                      <td style={S.td}><span style={S.pill(tierColor(l.commission?.tier||"none"))}>{l.commission?.rate||0}%</span></td>
+                      <td style={{ ...S.td,fontWeight:700,color:tierColor(l.commission?.tier||"none") }}>{fmtNaira(l.commission?.total||0)}</td>
+                      <td style={S.td}><span style={S.pill(l.status==="approved"?C.green:l.status==="rejected"?C.red:C.yellow)}>{l.status==="approved"?"✅":l.status==="rejected"?"❌":"⏳"}</span></td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+        {tab==="noanswer"&&teamType!=="socialmedia"&&(
+          <div>
+            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>📵 Log No-Answer</h1>
+            {saved==="noanswer"&&<div style={{ background:"rgba(0,229,160,0.1)",border:"1px solid rgba(0,229,160,0.2)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:C.green }}>✅ Logged.</div>}
+            <NoAnswerForm user={user} onSaved={async()=>{ await refresh(); setSaved("noanswer"); setTimeout(()=>setSaved(""),3000); }}/>
+          </div>
+        )}
+        {tab==="history"&&(
+          <div>
+            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>🕐 My Call History</h1>
+            <PeriodFilter value={period} onChange={setPeriod}/>
+            {myReports.length===0?<div style={{ ...S.card,textAlign:"center",padding:"40px",color:C.muted }}>No calls in this period.</div>:
+              myReports.map(r=>(
+                <div key={r.id} style={{ ...S.card,cursor:"pointer",position:"relative",overflow:"hidden" }} onClick={()=>setViewReport(r)}>
+                  <div style={S.accentTop(scoreColor(r.analysis?.overallScore||0))}/>
+                  <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8 }}>
+                    <div><div style={{ fontWeight:700,color:C.text,marginBottom:2 }}>{r.product||"General"} · {r.callType==="whatsapp"?"💬":"📞"}</div><div style={{ fontSize:11,color:C.muted }}>{fmtDate(r.date)}</div><div style={{ fontSize:12,color:"#8A9BB5",marginTop:3,maxWidth:480 }}>{r.analysis?.verdict}</div></div>
+                    <div style={{ display:"flex",gap:8 }}><span style={S.pill(scoreColor(r.analysis?.overallScore||0))}>{r.analysis?.overallScore||"—"}/100</span><span style={S.pill(outcomeColor(r.callOutcome))}>{outcomeLabel(r.callOutcome)}</span>{r.analysis?.resources&&<span style={S.pill(C.blue)}>📚</span>}</div>
+                  </div>
+                </div>
+              ))
+            }
+          </div>
+        )}
+      </main>
+      {viewReport&&<ReportModal report={viewReport} onClose={()=>setViewReport(null)}/>}
+    </div>
+  );
+}
+
+// ─── TEAM LEAD PORTAL ─────────────────────────────────────────────────────────
+function TeamLeadPortal({ user, users, teams, allReports, allLogs, allNoAnswers, onLogout, refresh }) {
+  const [tab,setTab]=useState("team"); const [period,setPeriod]=useState("month");
+  const [viewReport,setViewReport]=useState(null); const [msg,setMsg]=useState("");
+  const myTeam=teams[user.teamId]; const teamType=myTeam?.type||"sales";
+  const myMembers=Object.values(users).filter(u=>u.teamId===user.teamId&&u.role==="closer");
+  const myOwnReports=allReports.filter(r=>r.closerId===user.id);
+  const teamReports=allReports.filter(r=>r.teamId===user.teamId);
+  const teamLogs=allLogs.filter(l=>l.teamId===user.teamId);
+  const pendingLogs=teamLogs.filter(l=>l.status==="pending");
+  const myTodayLog=allLogs.find(l=>l.closerId===user.id&&l.date===todayStr());
+  // For social media, team log is the one submitted by team lead for team
+  const teamTodayLog=teamType==="socialmedia"?allLogs.find(l=>l.teamId===user.teamId&&l.date===todayStr()):null;
+  const flash=m=>{setMsg(m);setTimeout(()=>setMsg(""),2500);};
+  const approveLog=async(log,approved)=>{ const u={...log,status:approved?"approved":"rejected",approvedBy:user.id,approvedAt:Date.now()}; await saveDailyLog(u); await refresh(); flash(approved?"✅ Approved!":"❌ Rejected."); };
+  const memberStats=myMembers.map(m=>{
+    const reports=allReports.filter(r=>r.closerId===m.id);
+    const logs=allLogs.filter(l=>l.closerId===m.id);
+    const filtLogs=filterLogsByPeriod(logs.filter(l=>l.status==="approved"),period);
+    const pAssigned=filtLogs.reduce((s,l)=>s+(+(l.callsThrough||l.assigned)||0),0);
+    const pDelivered=filtLogs.reduce((s,l)=>s+(+l.delivered||0),0);
+    const periodRate=pAssigned>0?Math.round((pDelivered/pAssigned)*100):0;
+    const avgScore=reports.length>0?Math.round(reports.reduce((s,r)=>s+(r.analysis?.overallScore||0),0)/reports.length):0;
+    const weekRate=getWeeklyRate(allLogs,m.id);
+    const todayLog=logs.find(l=>l.date===todayStr());
+    return { ...m, reports, avgScore, periodRate, weekRate, todayLog };
+  });
+  const nb=(id,lbl)=><button onClick={()=>setTab(id)} style={{ background:tab===id?"rgba(0,229,160,0.1)":"transparent",color:tab===id?C.green:"#6A7A90",border:"none",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:500,cursor:"pointer" }}>{lbl}</button>;
+
+  return (
+    <div style={{ minHeight:"100vh",background:C.bg,color:C.text,fontFamily:"'DM Sans','Segoe UI',sans-serif" }}>
+      <div style={{ position:"fixed",inset:0,zIndex:0,pointerEvents:"none",backgroundImage:`linear-gradient(rgba(0,229,160,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,160,0.015) 1px,transparent 1px)`,backgroundSize:"44px 44px" }}/>
+      <nav style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 24px",height:56,background:"rgba(6,10,18,0.97)",borderBottom:"1px solid rgba(0,229,160,0.12)",position:"sticky",top:0,zIndex:100,backdropFilter:"blur(16px)" }}>
+        <div style={{ display:"flex",alignItems:"center",gap:9 }}>
+          <div style={{ width:30,height:30,borderRadius:8,background:`linear-gradient(135deg,${C.green},#00B37D)`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:12,color:"#060A12" }}>SC</div>
+          <div><div style={{ fontSize:13,fontWeight:800 }}>SalesCoach AI</div><div style={{ fontSize:9,color:C.green,textTransform:"uppercase",letterSpacing:"0.1em",fontWeight:600 }}>{teamTypeIcon(teamType)} {myTeam?.name} · Lead</div></div>
+        </div>
+        <div style={{ display:"flex",gap:3 }}>
+          {nb("team","👥 My Team")}
+          {nb("analyses","🧠 AI Analyses")}
+          {teamType!=="socialmedia"&&nb("approve","⏳ Approvals")}
+          {nb("mycalls","🎙️ My Calls")}
+          {nb("mylog","📋 "+(teamType==="socialmedia"?"Team Log":"My Log"))}
+        </div>
+        <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+          <div style={{ textAlign:"right" }}><div style={{ fontSize:12,fontWeight:700 }}>{user.name}</div><div style={{ fontSize:9,color:C.muted }}>Team Lead · {teamType==="socialmedia"?"Social Media":teamType==="followup"?"Follow-Up":"Sales"}</div></div>
+          <button onClick={onLogout} style={{ background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 10px",color:C.muted,cursor:"pointer",fontSize:11 }}>Sign Out</button>
+        </div>
+      </nav>
+      <main style={{ maxWidth:1150,margin:"0 auto",padding:"28px 20px",position:"relative",zIndex:1 }}>
+        {msg&&<div style={{ background:"rgba(0,229,160,0.1)",border:"1px solid rgba(0,229,160,0.2)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:C.green }}>{msg}</div>}
+
+        {tab==="team"&&(
+          <div>
+            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>{teamTypeIcon(teamType)} {myTeam?.name}</h1>
+            <p style={{ fontSize:13,color:C.muted,marginBottom:16 }}>{myMembers.length} members</p>
+            <PeriodFilter value={period} onChange={setPeriod}/>
+            {/* Social media team pool card */}
+            {teamType==="socialmedia"&&teamTodayLog&&(
+              <div style={{ ...S.card,background:"rgba(244,114,182,0.06)",border:"1px solid rgba(244,114,182,0.2)",marginBottom:16,position:"relative",overflow:"hidden" }}>
+                <div style={S.accentTop(C.pink)}/>
+                <div style={{ fontSize:13,fontWeight:700,color:C.pink,marginBottom:8 }}>📱 Today's Team Commission Pool</div>
+                <div style={{ display:"flex",gap:20,flexWrap:"wrap" }}>
+                  <div><div style={{ fontSize:11,color:C.muted }}>Total Pool</div><div style={{ fontSize:24,fontWeight:900,color:C.pink }}>{fmtNaira(teamTodayLog.commission?.totalPool||0)}</div></div>
+                  <div><div style={{ fontSize:11,color:C.muted }}>Per Member ({teamTodayLog.memberCount})</div><div style={{ fontSize:20,fontWeight:800,color:C.text }}>{fmtNaira(teamTodayLog.commission?.perMember||0)}</div></div>
+                  <div><div style={{ fontSize:11,color:C.muted }}>Conversion Rate</div><div style={{ fontSize:20,fontWeight:800,color:C.green }}>{teamTodayLog.commission?.rate||0}%</div></div>
+                </div>
+              </div>
+            )}
+            <div style={{ ...S.g4,marginBottom:18 }}>
+              {[{l:"Team Calls",v:teamReports.length,c:C.green},{l:"Members",v:myMembers.length,c:C.green},{l:"Pending",v:pendingLogs.length,c:pendingLogs.length>0?C.yellow:C.green},{l:"Red Flags",v:memberStats.filter(m=>m.weekRate!==null&&m.weekRate<60).length,c:C.red}].map((s,i)=>(
+                <div key={i} style={{ ...S.card,position:"relative",overflow:"hidden",marginBottom:0 }}><div style={S.accentTop(s.c)}/><div style={{ fontSize:10,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:700 }}>{s.l}</div><div style={{ fontSize:26,fontWeight:900,marginTop:6 }}>{s.v}</div></div>
+              ))}
+            </div>
+            {memberStats.map(m=>(
+              <div key={m.id} style={{ ...S.card,position:"relative",overflow:"hidden" }}>
+                <div style={S.accentTop(m.weekRate!==null&&m.weekRate<60?C.red:scoreColor(m.avgScore))}/>
+                {m.weekRate!==null&&m.weekRate<60&&<div style={{ background:"rgba(255,107,107,0.08)",border:"1px solid rgba(255,107,107,0.2)",borderRadius:8,padding:"6px 12px",marginBottom:10,fontSize:12,color:C.red }}>🚨 Red Flag — {m.name.split(" ")[0]}'s weekly rate is {m.weekRate}% (below 60%)</div>}
+                <div style={{ display:"flex",gap:14,flexWrap:"wrap",alignItems:"flex-start" }}>
+                  <div style={{ minWidth:180 }}>
+                    <div style={{ display:"flex",alignItems:"center",gap:8,marginBottom:8 }}>
+                      <div style={{ width:36,height:36,borderRadius:9,background:"rgba(0,229,160,0.1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,color:C.green }}>{m.name.split(" ").map(w=>w[0]).join("").slice(0,2)}</div>
+                      <div><div style={{ fontSize:13,fontWeight:700 }}>{m.name}</div><div style={{ fontSize:10,color:C.muted }}>{m.reports.length} calls</div></div>
+                    </div>
+                    <div style={{ display:"flex",gap:7,flexWrap:"wrap" }}><span style={S.pill(scoreColor(m.avgScore))}>Score: {m.avgScore||"—"}</span><span style={S.pill(m.periodRate>=90?C.green:m.periodRate>=50?C.yellow:C.red)}>{m.periodRate}%</span></div>
+                  </div>
+                  <div style={{ display:"flex",gap:10,flex:1,flexWrap:"wrap" }}>
+                    {[{l:"Today Log",v:m.todayLog?`${m.todayLog.callsThrough||m.todayLog.assigned||0} ${teamType==="followup"?"through":"assigned"}`:"Not logged",c:m.todayLog?C.green:C.red},{l:"This Week",v:m.weekRate!==null?`${m.weekRate}%`:"—",c:m.weekRate!==null?(m.weekRate>=60?C.green:C.red):C.muted}].map(x=>(
+                      <div key={x.l} style={{ background:"rgba(255,255,255,0.03)",borderRadius:10,padding:"8px 12px",minWidth:110 }}><div style={{ fontSize:9,color:C.muted,marginBottom:2,textTransform:"uppercase",letterSpacing:"0.06em" }}>{x.l}</div><div style={{ fontSize:14,fontWeight:800,color:x.c }}>{x.v}</div></div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {tab==="analyses"&&(
+          <div>
+            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>🧠 Team AI Analyses</h1>
+            <PeriodFilter value={period} onChange={setPeriod}/>
+            {myMembers.map(m=>{
+              const mR=filterByPeriod(allReports.filter(r=>r.closerId===m.id),"date",period).sort((a,b)=>b.date-a.date);
+              const avg=mR.length>0?Math.round(mR.reduce((s,r)=>s+(r.analysis?.overallScore||0),0)/mR.length):0;
+              return (
+                <div key={m.id} style={{ ...S.card,marginBottom:20 }}>
+                  <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,paddingBottom:12,borderBottom:`1px solid ${C.border}` }}>
+                    <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+                      <div style={{ width:34,height:34,borderRadius:9,background:"rgba(0,229,160,0.1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:C.green }}>{m.name.split(" ").map(w=>w[0]).join("").slice(0,2)}</div>
+                      <div><div style={{ fontSize:14,fontWeight:700 }}>{m.name}</div><div style={{ fontSize:11,color:C.muted }}>{mR.length} calls this period</div></div>
+                    </div>
+                    <span style={S.pill(scoreColor(avg))}>Avg: {avg||"—"}/100</span>
+                  </div>
+                  {mR.length===0?<div style={{ color:C.muted,fontSize:12 }}>No calls this period.</div>:
+                    mR.map(r=>(
+                      <div key={r.id} onClick={()=>setViewReport(r)} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 0",borderBottom:`1px solid rgba(255,255,255,0.04)`,cursor:"pointer",flexWrap:"wrap",gap:8 }}>
+                        <div>
+                          <div style={{ fontSize:12,fontWeight:600,color:C.text }}>{r.product||"General"} · {r.callType==="whatsapp"?"💬":"📞"} · {fmtDate(r.date)}</div>
+                          <div style={{ fontSize:11,color:C.muted }}>{r.analysis?.verdict?.slice(0,65)}...</div>
+                          {r.analysis?.weaknesses?.[0]&&<div style={{ fontSize:10,color:C.red,marginTop:2 }}>⚠️ {r.analysis.weaknesses[0]}</div>}
+                        </div>
+                        <div style={{ display:"flex",gap:7 }}>
+                          <span style={S.pill(scoreColor(r.analysis?.overallScore||0))}>{r.analysis?.overallScore}/100</span>
+                          <span style={S.pill(outcomeColor(r.callOutcome))}>{outcomeLabel(r.callOutcome)}</span>
+                          {r.analysis?.resources&&<span style={S.pill(C.blue)}>📚</span>}
+                          <button style={{ ...S.btnGhost,padding:"3px 9px",fontSize:11 }}>View</button>
+                        </div>
+                      </div>
+                    ))
+                  }
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {tab==="approve"&&teamType!=="socialmedia"&&(
+          <div>
+            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>⏳ Pending Approvals</h1>
+            {pendingLogs.length===0?<div style={{ ...S.card,textAlign:"center",padding:"40px",color:C.muted }}>✅ No pending approvals!</div>:
+              pendingLogs.map(log=>{
+                const isFollowup=log.teamType==="followup";
+                const comm=log.commission;
+                return (
+                  <div key={log.id} style={{ ...S.card,position:"relative",overflow:"hidden",borderColor:`${C.yellow}22` }}>
+                    <div style={S.accentTop(C.yellow)}/>
+                    <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexWrap:"wrap",gap:12 }}>
+                      <div>
+                        <div style={{ fontSize:14,fontWeight:700,marginBottom:6 }}>{log.closerName} — {log.date}</div>
+                        {isFollowup?(
+                          <div style={{ display:"grid",gridTemplateColumns:"repeat(5,auto)",gap:"4px 14px",fontSize:12,color:C.muted }}>
+                            <span>Calls Made: <strong style={{ color:C.text }}>{log.callsMade}</strong></span>
+                            <span>Went Through: <strong style={{ color:C.text }}>{log.callsThrough}</strong></span>
+                            <span>Delivered: <strong style={{ color:C.text }}>{log.delivered}</strong></span>
+                            <span>Upsells: <strong style={{ color:C.green }}>{log.upsells||0}</strong></span>
+                            <span>Referrals: <strong style={{ color:C.blue }}>{log.referrals||0}</strong></span>
+                          </div>
+                        ):(
+                          <div style={{ display:"grid",gridTemplateColumns:"repeat(6,auto)",gap:"4px 14px",fontSize:12,color:C.muted }}>
+                            <span>Assigned: <strong style={{ color:C.text }}>{log.assigned}</strong></span>
+                            <span>Confirmed: <strong style={{ color:C.text }}>{log.confirmed}</strong></span>
+                            <span>Delivered: <strong style={{ color:C.text }}>{log.delivered}</strong></span>
+                            <span>Upsells: <strong style={{ color:comm?.upsellLocked?C.muted:C.green }}>{log.upsells||0}</strong></span>
+                            <span>Repeats: <strong style={{ color:C.purple }}>{log.repeats||0}</strong></span>
+                            <span>Referrals: <strong style={{ color:C.blue }}>{log.referrals||0}</strong></span>
+                          </div>
+                        )}
+                        {comm?.followupCount>0&&<div style={{ marginTop:5,fontSize:11,color:C.blue }}>📦 +{comm.followupCount} follow-up deliveries included</div>}
+                        {comm?.upsellLocked&&<div style={{ marginTop:3,fontSize:11,color:C.red }}>🔒 Upsell locked — below 50% delivery rate</div>}
+                        {isFollowup&&<div style={{ marginTop:3,fontSize:11,color:C.green }}>✅ Upsell always active for follow-up team</div>}
+                      </div>
+                      <div style={{ display:"flex",gap:8,alignItems:"center" }}>
+                        <div style={{ textAlign:"right",marginRight:8 }}>
+                          <div style={{ fontSize:11,color:C.muted }}>Commission to be paid</div>
+                          <div style={{ fontSize:20,fontWeight:900,color:tierColor(comm?.tier||"none") }}>{fmtNaira(comm?.total||0)}</div>
+                          <span style={S.pill(tierColor(comm?.tier||"none"))}>{comm?.rate||0}% rate</span>
+                        </div>
+                        <button style={S.btn} onClick={()=>approveLog(log,true)}>✅ Approve</button>
+                        <button style={S.btnDanger} onClick={()=>approveLog(log,false)}>❌ Reject</button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            }
+          </div>
+        )}
+
+        {tab==="mycalls"&&(
+          <div>
+            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>🎙️ My Own Calls</h1>
+            <PeriodFilter value={period} onChange={setPeriod}/>
+            <CallUploadSection user={user} teams={teams} refresh={refresh}/>
+            {filterByPeriod(myOwnReports,"date",period).map(r=>(
+              <div key={r.id} style={{ ...S.card,cursor:"pointer",position:"relative",overflow:"hidden" }} onClick={()=>setViewReport(r)}>
+                <div style={S.accentTop(scoreColor(r.analysis?.overallScore||0))}/>
+                <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:8 }}>
+                  <div><div style={{ fontWeight:700,color:C.text,marginBottom:2 }}>{r.product||"General"} · {r.callType==="whatsapp"?"💬":"📞"}</div><div style={{ fontSize:11,color:C.muted }}>{fmtDate(r.date)}</div><div style={{ fontSize:12,color:"#8A9BB5",marginTop:3,maxWidth:400 }}>{r.analysis?.verdict}</div></div>
+                  <div style={{ display:"flex",gap:8 }}><span style={S.pill(scoreColor(r.analysis?.overallScore||0))}>{r.analysis?.overallScore}/100</span><span style={S.pill(outcomeColor(r.callOutcome))}>{outcomeLabel(r.callOutcome)}</span></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {tab==="mylog"&&(
+          <div>
+            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>📋 {teamType==="socialmedia"?"Team Daily Log":"My Daily Log"}</h1>
+            {msg&&<div style={{ background:"rgba(0,229,160,0.1)",border:"1px solid rgba(0,229,160,0.2)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:C.green }}>{msg}</div>}
+            {teamType==="socialmedia"?(
+              <>
+                {teamTodayLog&&<CommissionCard comm={teamTodayLog.commission} label="Today's Team Pool"/>}
+                <SocialMediaTeamLogForm user={user} users={users} teams={teams} existingLog={teamTodayLog} onSaved={async()=>{ await refresh(); flash("✅ Team log saved!"); }}/>
+              </>
+            ) : teamType==="followup" ? (
+              <>
+                {myTodayLog&&<CommissionCard comm={myTodayLog.commission}/>}
+                <FollowupDailyLogForm user={user} existingLog={myTodayLog} onSaved={async(log)=>{ const a={...log,status:"approved",approvedBy:user.id,approvedAt:Date.now()}; await saveDailyLog(a); await refresh(); flash("✅ Saved and auto-approved!"); }}/>
+              </>
+            ) : (
+              <>
+                {myTodayLog&&<CommissionCard comm={myTodayLog.commission}/>}
+                <SalesDailyLogForm user={user} existingLog={myTodayLog} onSaved={async(log)=>{ const a={...log,status:"approved",approvedBy:user.id,approvedAt:Date.now()}; await saveDailyLog(a); await refresh(); flash("✅ Saved and auto-approved!"); }}/>
+              </>
+            )}
+          </div>
+        )}
+      </main>
+      {viewReport&&<ReportModal report={viewReport} onClose={()=>setViewReport(null)}/>}
+    </div>
+  );
+}
+
+// ─── MANAGEMENT DASHBOARD ─────────────────────────────────────────────────────
+function ManagementDashboard({ user, users, teams, allReports, allLogs, allNoAnswers, onLogout, refresh, saveUsersData }) {
+  const [tab,setTab]=useState("overview"); const [period,setPeriod]=useState("month");
+  const [viewReport,setViewReport]=useState(null); const [msg,setMsg]=useState("");
+  const [newName,setNewName]=useState(""); const [newPin,setNewPin]=useState(""); const [newRole,setNewRole]=useState("closer"); const [newTeam,setNewTeam]=useState("team1"); const [showAdd,setShowAdd]=useState(false); const [saving,setSaving]=useState(false);
+  const flash=m=>{setMsg(m);setTimeout(()=>setMsg(""),3000);};
+  const accentColor=accent(user.role); const teamList=Object.values(teams); const thisMonth=new Date().toISOString().slice(0,7);
+  const closerList=Object.values(users).filter(u=>["closer","teamlead"].includes(u.role));
+  const allStats=closerList.map(c=>{
+    const reports=allReports.filter(r=>r.closerId===c.id);
+    const logs=allLogs.filter(l=>l.closerId===c.id);
+    const filtLogs=filterLogsByPeriod(logs.filter(l=>l.status==="approved"),period);
+    const pAssigned=filtLogs.reduce((s,l)=>s+(+(l.callsThrough||l.leadsConfirmed||l.assigned)||0),0);
+    const pDelivered=filtLogs.reduce((s,l)=>s+(+l.delivered||0),0);
+    const periodRate=pAssigned>0?Math.round((pDelivered/pAssigned)*100):0;
+    const avgScore=reports.length>0?Math.round(reports.reduce((s,r)=>s+(r.analysis?.overallScore||0),0)/reports.length):0;
+    const weekRate=getWeeklyRate(allLogs,c.id);
+    const team=teams[c.teamId]; const teamType=team?.type||"sales";
+    // Earnings calculation differs for social media
+    let periodEarnings=0;
+    if(teamType==="socialmedia"){ periodEarnings=filtLogs.reduce((s,l)=>s+(l.commission?.perMember||0),0); }
+    else { periodEarnings=filtLogs.reduce((s,l)=>s+(l.commission?.total||0),0); }
+    return { ...c, reports, logs, avgScore, periodRate, periodEarnings, weekRate, team, teamType };
+  }).sort((a,b)=>b.avgScore-a.avgScore);
+
+  const poolQualifiers=allStats.filter(c=>c.teamType!=="socialmedia"&&(()=>{ const ml=c.logs.filter(l=>l.date?.startsWith(thisMonth)&&l.status==="approved"); const ma=ml.reduce((s,l)=>s+(+(l.callsThrough||l.assigned)||0),0); const md=ml.reduce((s,l)=>s+(+l.delivered||0),0); return ma>0&&(md/ma)>=0.9; })());
+  const totalCommission=allLogs.filter(l=>l.status==="approved").reduce((s,l)=>s+(l.commission?.total||l.commission?.perMember||0),0);
+  const filteredReports=filterByPeriod(allReports,"date",period);
+  const redFlags=allStats.filter(c=>c.weekRate!==null&&c.weekRate<60);
+  const teamStats=teamList.map(t=>{
+    const members=Object.values(users).filter(u=>u.teamId===t.id);
+    const tReports=filterByPeriod(allReports.filter(r=>r.teamId===t.id),"date",period);
+    const tLogs=filterLogsByPeriod(allLogs.filter(l=>l.teamId===t.id&&l.status==="approved"),period);
+    const avgScore=tReports.length>0?Math.round(tReports.reduce((s,r)=>s+(r.analysis?.overallScore||0),0)/tReports.length):0;
+    const tEarnings=t.type==="socialmedia"?tLogs.reduce((s,l)=>s+(l.commission?.totalPool||0),0):tLogs.reduce((s,l)=>s+(l.commission?.total||0),0);
+    return { ...t, members, tReports, tEarnings, avgScore };
+  });
+  const exportCSV=()=>{ const rows=[["Date","Closer","Team","Product","Type","Outcome","Score"]]; filteredReports.forEach(r=>{ const t=teams[r.teamId]; rows.push([fmtDate(r.date),r.closerName,t?.name||"",r.product||"",r.callType,r.callOutcome,r.analysis?.overallScore||""]); }); const csv=rows.map(r=>r.map(v=>`"${v}"`).join(",")).join("\n"); const a=document.createElement("a"); a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv); a.download="calls.csv"; a.click(); };
+  const exportComm=()=>{ const rows=[["Date","Name","Team","Type","Assigned/Through","Delivered","Rate","Base","Upsell","Repeat","Referral","Total/PerMember","Status"]]; allLogs.forEach(l=>{ const t=teams[l.teamId]; const c=l.commission||{}; rows.push([l.date,l.closerName,t?.name||"",t?.type||"",l.callsThrough||l.leadsConfirmed||l.assigned,l.delivered,`${c.rate||0}%`,c.base||0,c.upsellBonus||0,c.repeatBonus||0,c.referralBonus||0,c.perMember||c.total||0,l.status]); }); const csv=rows.map(r=>r.map(v=>`"${v}"`).join(",")).join("\n"); const a=document.createElement("a"); a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv); a.download="commission.csv"; a.click(); };
+  const addUser=async()=>{ if(!newName.trim()||newPin.length!==4){flash("⚠️ Fill all fields."); return;} setSaving(true); const id=uid(); const updated={...users,[id]:{id,name:newName.trim(),pin:newPin,role:newRole,teamId:["closer","teamlead"].includes(newRole)?newTeam:null,createdAt:Date.now()}}; await saveUsersData(updated); await refresh(); setSaving(false); setNewName(""); setNewPin(""); setShowAdd(false); flash("✅ Account created!"); };
+  const removeUser=async(id)=>{ if(id===user.id){flash("⚠️ Can't remove yourself."); return;} const u={...users}; delete u[id]; await saveUsersData(u); await refresh(); flash("🗑️ Removed."); };
+  const nb=(id,lbl)=><button onClick={()=>setTab(id)} style={{ background:tab===id?`${accentColor}15`:"transparent",color:tab===id?accentColor:"#6A7A90",border:"none",borderRadius:8,padding:"7px 14px",fontSize:12,fontWeight:500,cursor:"pointer" }}>{lbl}</button>;
+
+  return (
+    <div style={{ minHeight:"100vh",background:C.bg,color:C.text,fontFamily:"'DM Sans','Segoe UI',sans-serif" }}>
+      <div style={{ position:"fixed",inset:0,zIndex:0,pointerEvents:"none",backgroundImage:`linear-gradient(${accentColor}08 1px,transparent 1px),linear-gradient(90deg,${accentColor}08 1px,transparent 1px)`,backgroundSize:"44px 44px" }}/>
+      <nav style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 20px",height:56,background:"rgba(6,10,18,0.97)",borderBottom:`1px solid ${accentColor}20`,position:"sticky",top:0,zIndex:100,backdropFilter:"blur(16px)" }}>
+        <div style={{ display:"flex",alignItems:"center",gap:9 }}>
+          <div style={{ width:30,height:30,borderRadius:8,background:`linear-gradient(135deg,${accentColor},${accentColor}88)`,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:900,fontSize:12,color:"#060A12" }}>SC</div>
+          <div><div style={{ fontSize:13,fontWeight:800 }}>SalesCoach AI</div><div style={{ fontSize:9,color:accentColor,textTransform:"uppercase",letterSpacing:"0.1em",fontWeight:600 }}>{ROLE_LABELS[user.role]}</div></div>
+        </div>
+        <div style={{ display:"flex",gap:2,flexWrap:"wrap" }}>
+          {nb("overview","📊 Overview")}{nb("teams","🏢 Teams")}{nb("analyses","🧠 Analyses")}{nb("leaderboard","🏆 Leaderboard")}{nb("commission","💰 Commission")}{nb("reports","📋 Reports")}{nb("manage","⚙️ Manage")}
+        </div>
+        <div style={{ display:"flex",alignItems:"center",gap:10 }}>
+          <div style={{ textAlign:"right" }}><div style={{ fontSize:12,fontWeight:700 }}>{user.name}</div><div style={{ fontSize:9,color:C.muted }}>{ROLE_LABELS[user.role]}</div></div>
+          <button onClick={onLogout} style={{ background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 10px",color:C.muted,cursor:"pointer",fontSize:11 }}>Sign Out</button>
+        </div>
+      </nav>
+      <main style={{ maxWidth:1220,margin:"0 auto",padding:"28px 20px",position:"relative",zIndex:1 }}>
+        {msg&&<div style={{ background:"rgba(0,229,160,0.1)",border:"1px solid rgba(0,229,160,0.2)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:C.green }}>{msg}</div>}
+
+        {tab==="overview"&&(
+          <div>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-end",marginBottom:16,flexWrap:"wrap",gap:10 }}>
+              <div><h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>Company Overview</h1><p style={{ fontSize:13,color:C.muted }}>HealthPlus Nigeria · {teamList.length} teams · {closerList.length} closers & leads</p></div>
+              <div style={{ display:"flex",gap:10 }}><button style={S.btnGhost} onClick={exportCSV}>📥 Calls CSV</button><button style={S.btnGhost} onClick={exportComm}>💰 Commission CSV</button></div>
+            </div>
+            <PeriodFilter value={period} onChange={setPeriod}/>
+            {redFlags.length>0&&(
+              <div style={{ background:"rgba(255,107,107,0.07)",border:"1px solid rgba(255,107,107,0.25)",borderRadius:12,padding:"12px 16px",marginBottom:18 }}>
+                <div style={{ fontSize:12,fontWeight:800,color:C.red,marginBottom:7 }}>🚨 Weekly Red Flags — {redFlags.length} closer{redFlags.length>1?"s":""} below 60%</div>
+                <div style={{ display:"flex",gap:8,flexWrap:"wrap" }}>{redFlags.map(c=><span key={c.id} style={S.pill(C.red)}>{c.name} — {c.weekRate}%</span>)}</div>
+              </div>
+            )}
+            <div style={{ ...S.g4,marginBottom:20 }}>
+              {[{l:"Calls Analyzed",v:filteredReports.length,c:C.green},{l:"Commission to Be Paid",v:fmtNaira(totalCommission),c:C.yellow,sub:"Paid with end-of-month salary"},{l:"Excellence Pool (90%+)",v:poolQualifiers.length,c:C.green},{l:"Red Flags This Week",v:redFlags.length,c:redFlags.length>0?C.red:C.green}].map((s,i)=>(
+                <div key={i} style={{ ...S.card,position:"relative",overflow:"hidden",marginBottom:0 }}><div style={S.accentTop(s.c)}/><div style={{ fontSize:10,color:C.muted,textTransform:"uppercase",letterSpacing:"0.06em",fontWeight:700 }}>{s.l}</div><div style={{ fontSize:22,fontWeight:900,marginTop:6 }}>{s.v}</div>{s.sub&&<div style={{ fontSize:10,color:C.muted,marginTop:2 }}>{s.sub}</div>}</div>
+              ))}
+            </div>
+            <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:14 }}>
+              {teamStats.map(t=>(
+                <div key={t.id} style={{ ...S.card,position:"relative",overflow:"hidden",marginBottom:0 }}>
+                  <div style={S.accentTop(t.type==="socialmedia"?C.pink:t.type==="followup"?C.purple:C.green)}/>
+                  <div style={{ display:"flex",justifyContent:"space-between",alignItems:"flex-start" }}>
+                    <div><div style={{ fontSize:13,fontWeight:700,marginBottom:3 }}>{teamTypeIcon(t.type)} {t.name}</div><div style={{ fontSize:11,color:C.muted }}>{t.members.length} members · {t.tReports.length} calls</div></div>
+                    <div style={{ textAlign:"right" }}><div style={{ fontSize:10,color:C.muted }}>Avg Score</div><div style={{ fontSize:20,fontWeight:900,color:scoreColor(t.avgScore) }}>{t.avgScore||"—"}</div></div>
+                  </div>
+                  <div style={{ marginTop:8,fontSize:12,fontWeight:700,color:C.yellow }}>To be paid: {fmtNaira(t.tEarnings)}{t.type==="socialmedia"?" (pool)":""}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {tab==="teams"&&(
+          <div>
+            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>🏢 All Teams</h1>
+            <PeriodFilter value={period} onChange={setPeriod}/>
+            {teamStats.map(t=>{
+              const tMembers=allStats.filter(c=>c.teamId===t.id);
+              return (
+                <div key={t.id} style={{ ...S.card,marginBottom:20 }}>
+                  <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,paddingBottom:12,borderBottom:`1px solid ${C.border}` }}>
+                    <div style={{ fontSize:14,fontWeight:800 }}>{teamTypeIcon(t.type)} {t.name} <span style={{ fontSize:11,color:C.muted,fontWeight:400 }}>· Lead: {users[t.leadId]?.name}</span></div>
+                    <div style={{ display:"flex",gap:8 }}>
+                      {t.type==="socialmedia"&&<span style={S.pill(C.pink)}>📱 Joint Commission</span>}
+                      {t.type==="followup"&&<span style={S.pill(C.purple)}>🔄 Calls Through Model</span>}
+                    </div>
+                  </div>
+                  {t.type==="socialmedia"&&(
+                    <div style={{ background:"rgba(244,114,182,0.07)",border:"1px solid rgba(244,114,182,0.15)",borderRadius:10,padding:"9px 14px",marginBottom:12,fontSize:12,color:"#FDA4C4" }}>
+                      Social Media Team commission is pooled and split equally. Individual earnings shown as share of team pool. Log submitted daily by Mr Kelvin.
+                    </div>
+                  )}
+                  <table style={{ width:"100%",borderCollapse:"collapse" }}>
+                    <thead><tr>{["Name","Role","Score",t.type==="followup"?"Calls Through Rate":t.type==="socialmedia"?"Conversion Rate":"Delivery Rate","Earnings","Calls","Week","Pool"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+                    <tbody>{tMembers.map(m=>(
+                      <tr key={m.id}>
+                        <td style={{ ...S.td,fontWeight:600,color:C.text }}>{m.name}</td>
+                        <td style={S.td}><span style={S.pill(accent(m.role))}>{ROLE_LABELS[m.role]}</span></td>
+                        <td style={S.td}><span style={S.pill(scoreColor(m.avgScore))}>{m.avgScore||"—"}</span></td>
+                        <td style={S.td}><span style={S.pill(m.periodRate>=90?C.green:m.periodRate>=50?C.yellow:C.red)}>{m.periodRate}%</span></td>
+                        <td style={{ ...S.td,fontWeight:700,color:C.yellow }}>{fmtNaira(m.periodEarnings)}{t.type==="socialmedia"?" (share)":""}</td>
+                        <td style={S.td}>{m.reports.length}</td>
+                        <td style={S.td}><span style={S.pill(m.weekRate!==null?(m.weekRate>=60?C.green:C.red):C.muted)}>{m.weekRate!==null?`${m.weekRate}%`:"—"}{m.weekRate!==null&&m.weekRate<60?" 🚨":""}</span></td>
+                        <td style={S.td}><span style={S.pill(m.periodRate>=90&&m.teamType!=="socialmedia"?C.green:C.muted)}>{m.periodRate>=90&&m.teamType!=="socialmedia"?"✅":""}</span></td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {tab==="analyses"&&(
+          <div>
+            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>🧠 All AI Analyses</h1>
+            <PeriodFilter value={period} onChange={setPeriod}/>
+            {teamList.map(t=>{
+              const tMembers=Object.values(users).filter(u=>u.teamId===t.id);
+              return (
+                <div key={t.id} style={{ marginBottom:28 }}>
+                  <div style={{ fontSize:14,fontWeight:800,color:C.text,marginBottom:12,paddingBottom:10,borderBottom:`1px solid ${C.border}` }}>{teamTypeIcon(t.type)} {t.name}</div>
+                  {tMembers.map(m=>{
+                    const mR=filterByPeriod(allReports.filter(r=>r.closerId===m.id),"date",period).sort((a,b)=>b.date-a.date);
+                    const avg=mR.length>0?Math.round(mR.reduce((s,r)=>s+(r.analysis?.overallScore||0),0)/mR.length):0;
+                    return (
+                      <div key={m.id} style={{ ...S.card,marginBottom:12 }}>
+                        <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:mR.length?10:0 }}>
+                          <div style={{ display:"flex",alignItems:"center",gap:9 }}>
+                            <div style={{ width:32,height:32,borderRadius:8,background:"rgba(0,229,160,0.1)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:C.green }}>{m.name.split(" ").map(w=>w[0]).join("").slice(0,2)}</div>
+                            <div><div style={{ fontSize:13,fontWeight:700 }}>{m.name} <span style={S.pill(accent(m.role))}>{ROLE_LABELS[m.role]}</span></div><div style={{ fontSize:11,color:C.muted }}>{mR.length} call{mR.length!==1?"s":""}</div></div>
+                          </div>
+                          <span style={S.pill(scoreColor(avg))}>Avg: {avg||"—"}/100</span>
+                        </div>
+                        {mR.length===0?<div style={{ fontSize:12,color:C.muted }}>No calls this period.</div>:
+                          mR.map(r=>(
+                            <div key={r.id} onClick={()=>setViewReport(r)} style={{ display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderTop:`1px solid rgba(255,255,255,0.04)`,cursor:"pointer",flexWrap:"wrap",gap:7 }}>
+                              <div>
+                                <div style={{ fontSize:12,fontWeight:600,color:C.text }}>{r.product||"General"} · {r.callType==="whatsapp"?"💬":"📞"} · {fmtDate(r.date)}</div>
+                                <div style={{ fontSize:11,color:C.muted }}>{r.analysis?.verdict?.slice(0,65)}...</div>
+                                {r.analysis?.weaknesses?.[0]&&<div style={{ fontSize:10,color:C.red,marginTop:2 }}>⚠️ {r.analysis.weaknesses[0]}</div>}
+                              </div>
+                              <div style={{ display:"flex",gap:6 }}>
+                                <span style={S.pill(scoreColor(r.analysis?.overallScore||0))}>{r.analysis?.overallScore}/100</span>
+                                <span style={S.pill(outcomeColor(r.callOutcome))}>{outcomeLabel(r.callOutcome)}</span>
+                                {r.analysis?.resources&&<span style={S.pill(C.blue)}>📚</span>}
+                                <button style={{ ...S.btnGhost,padding:"3px 9px",fontSize:11 }}>View</button>
+                              </div>
+                            </div>
+                          ))
+                        }
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {tab==="leaderboard"&&(
+          <div>
+            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>🏆 Leaderboard</h1>
+            <PeriodFilter value={period} onChange={setPeriod}/>
+            <div style={{ ...S.g3,marginBottom:20 }}>
+              {allStats.slice(0,3).map((c,i)=>(
+                <div key={c.id} style={{ ...S.card,textAlign:"center",paddingTop:28,position:"relative",overflow:"hidden",marginBottom:0 }}>
+                  <div style={S.accentTop(i===0?C.yellow:i===1?"#9CA3AF":"#CD7C2F")}/>
+                  <div style={{ fontSize:26,marginBottom:8 }}>{["🥇","🥈","🥉"][i]}</div>
+                  <div style={{ fontSize:14,fontWeight:800,marginBottom:3 }}>{c.name}</div>
+                  <div style={{ fontSize:11,color:C.muted,marginBottom:8 }}>{c.team?.name}</div>
+                  <div style={{ display:"flex",justifyContent:"center",marginBottom:8 }}><ScoreRing score={c.avgScore||0} size={68} stroke={7}/></div>
+                  <div style={{ display:"flex",justifyContent:"center",gap:14 }}>
+                    <div><div style={{ fontSize:9,color:C.muted }}>Rate</div><div style={{ fontSize:13,fontWeight:800,color:C.green }}>{c.periodRate}%</div></div>
+                    <div><div style={{ fontSize:9,color:C.muted }}>Earnings</div><div style={{ fontSize:12,fontWeight:800,color:C.yellow }}>{fmtNaira(c.periodEarnings)}</div></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div style={S.card}>
+              <table style={{ width:"100%",borderCollapse:"collapse" }}>
+                <thead><tr>{["#","Name","Team","Score","Rate","Earnings","Week","Pool"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+                <tbody>{allStats.map((c,i)=>(
+                  <tr key={c.id}>
+                    <td style={{ ...S.td,fontWeight:800,color:["#FFB627","#9CA3AF","#CD7C2F"][i]||C.muted }}>#{i+1}</td>
+                    <td style={{ ...S.td,fontWeight:600,color:C.text }}>{c.name}</td>
+                    <td style={S.td}>{c.team?.name||"—"} {c.teamType==="socialmedia"?"📱":c.teamType==="followup"?"🔄":""}</td>
+                    <td style={S.td}><span style={S.pill(scoreColor(c.avgScore))}>{c.avgScore||"—"}</span></td>
+                    <td style={S.td}><span style={S.pill(c.periodRate>=90?C.green:c.periodRate>=50?C.yellow:C.red)}>{c.periodRate}%</span></td>
+                    <td style={{ ...S.td,fontWeight:700,color:C.yellow }}>{fmtNaira(c.periodEarnings)}</td>
+                    <td style={S.td}><span style={S.pill(c.weekRate!==null?(c.weekRate>=60?C.green:C.red):C.muted)}>{c.weekRate!==null?`${c.weekRate}%`:"—"}{c.weekRate!==null&&c.weekRate<60?" 🚨":""}</span></td>
+                    <td style={S.td}><span style={S.pill(c.periodRate>=90&&c.teamType!=="socialmedia"?C.green:C.muted)}>{c.periodRate>=90&&c.teamType!=="socialmedia"?"✅":""}</span></td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {tab==="commission"&&(
+          <div>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10 }}>
+              <div><h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>💰 Commission Dashboard</h1><p style={{ fontSize:13,color:C.muted }}>All amounts paid with end-of-month salary</p></div>
+              <button style={S.btnGold} onClick={exportComm}>📥 Export CSV</button>
+            </div>
+            <PeriodFilter value={period} onChange={setPeriod}/>
+            {/* Excellence Pool */}
+            <div style={{ ...S.card,background:"rgba(255,182,39,0.05)",border:"1px solid rgba(255,182,39,0.2)",marginBottom:18 }}>
+              <div style={{ fontSize:13,fontWeight:800,color:C.yellow,marginBottom:8 }}>🏆 Monthly Excellence Pool — {poolQualifiers.length} qualifier{poolQualifiers.length!==1?"s":""} at 90%+</div>
+              <div style={{ fontSize:12,color:C.muted,marginBottom:10 }}>Manager distributes pool manually with salary. Social Media Team not eligible (flat rate model).</div>
+              {poolQualifiers.length===0?<div style={{ fontSize:12,color:C.muted }}>No qualifiers yet this month.</div>:
+                <div style={{ display:"flex",gap:10,flexWrap:"wrap" }}>{poolQualifiers.map(c=><div key={c.id} style={{ background:"rgba(255,182,39,0.1)",border:"1px solid rgba(255,182,39,0.25)",borderRadius:10,padding:"9px 14px" }}><div style={{ fontSize:13,fontWeight:700 }}>{c.name}</div><div style={{ fontSize:11,color:C.muted }}>{c.team?.name}</div><div style={{ fontSize:16,fontWeight:900,color:C.yellow }}>{c.periodRate}%</div></div>)}</div>
+              }
+            </div>
+            {/* Commission rules */}
+            <div style={{ ...S.g3,marginBottom:18 }}>
+              {[
+                {title:"💼 Sales Teams",color:C.green,rules:["🥇 90%+ → ₦200/delivered","🥈 65–89% → ₦150/delivered","🥉 50–64% → ₦100/delivered","Below 50% → ₦0 base","Upsell ₦600 (only if ≥50%)","Repeat ₦300 · Referral ₦300"]},
+                {title:"🔄 Follow-Up Team",color:C.purple,rules:["Rate = Delivered ÷ Calls Through","Same 50/65/90 tiers apply","Upsell ₦600 ALWAYS active","No delivery rate restriction on bonuses","Repeat ₦300 · Referral ₦300"]},
+                {title:"📱 Social Media Team",color:C.pink,rules:["Flat ₦200 per delivered (no tiers)","All commission split equally","Upsell ₦600 ALWAYS active","Repeat ₦300 · Referral ₦300 (all shared)","Mr Kelvin submits one team log"]},
+              ].map(s=>(
+                <div key={s.title} style={{ ...S.card,position:"relative",overflow:"hidden",marginBottom:0 }}>
+                  <div style={S.accentTop(s.color)}/>
+                  <div style={{ fontSize:12,fontWeight:800,color:s.color,marginBottom:10 }}>{s.title}</div>
+                  {s.rules.map((r,i)=><div key={i} style={{ fontSize:11,color:C.muted,marginBottom:4 }}>▸ {r}</div>)}
+                </div>
+              ))}
+            </div>
+            {/* Individual commission table */}
+            <div style={S.card}>
+              <div style={{ fontSize:13,fontWeight:700,marginBottom:14 }}>Individual Commission to Be Paid — This Month</div>
+              <table style={{ width:"100%",borderCollapse:"collapse" }}>
+                <thead><tr>{["Name","Team","Base","Upsell","Repeat","Referral","Total/Share","Rate","Notes"].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+                <tbody>{allStats.map(c=>{
+                  const ml=c.logs.filter(l=>l.date?.startsWith(thisMonth)&&l.status==="approved");
+                  const base=ml.reduce((s,l)=>s+(l.commission?.base||0),0);
+                  const upsell=ml.reduce((s,l)=>s+(l.commission?.upsellBonus||0),0);
+                  const repeat=ml.reduce((s,l)=>s+(l.commission?.repeatBonus||0),0);
+                  const referral=ml.reduce((s,l)=>s+(l.commission?.referralBonus||0),0);
+                  const share=c.teamType==="socialmedia"?ml.reduce((s,l)=>s+(l.commission?.perMember||0),0):base+upsell+repeat+referral;
+                  const ma=ml.reduce((s,l)=>s+(+(l.callsThrough||l.leadsConfirmed||l.assigned)||0),0);
+                  const md=ml.reduce((s,l)=>s+(+l.delivered||0),0);
+                  const mRate=ma>0?Math.round((md/ma)*100):0;
+                  return (
+                    <tr key={c.id}>
+                      <td style={{ ...S.td,fontWeight:600,color:C.text }}>{c.name}</td>
+                      <td style={S.td}>{c.team?.name||"—"}</td>
+                      <td style={S.td}>{c.teamType==="socialmedia"?"—":fmtNaira(base)}</td>
+                      <td style={{ ...S.td,color:C.green }}>{c.teamType==="socialmedia"?"—":fmtNaira(upsell)}</td>
+                      <td style={{ ...S.td,color:C.purple }}>{c.teamType==="socialmedia"?"—":fmtNaira(repeat)}</td>
+                      <td style={{ ...S.td,color:C.blue }}>{c.teamType==="socialmedia"?"—":fmtNaira(referral)}</td>
+                      <td style={{ ...S.td,fontWeight:800,color:c.teamType==="socialmedia"?C.pink:C.yellow }}>{fmtNaira(share)}</td>
+                      <td style={S.td}><span style={S.pill(mRate>=90?C.green:mRate>=50?C.yellow:C.red)}>{mRate}%</span></td>
+                      <td style={S.td}><span style={{ fontSize:10,color:C.muted }}>{c.teamType==="socialmedia"?"Equal share":c.teamType==="followup"?"Upsell always on":"Standard"}</span></td>
+                    </tr>
+                  );
+                })}</tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {tab==="reports"&&(
+          <div>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16,flexWrap:"wrap",gap:10 }}>
+              <div><h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>📋 All Call Reports</h1><p style={{ fontSize:13,color:C.muted }}>{filteredReports.length} calls</p></div>
+              <button style={S.btnGhost} onClick={exportCSV}>📥 Export CSV</button>
+            </div>
+            <PeriodFilter value={period} onChange={setPeriod}/>
+            {filteredReports.length===0?<div style={{ ...S.card,textAlign:"center",padding:"40px",color:C.muted }}>No calls this period.</div>:
+              <div style={S.card}>
+                <table style={{ width:"100%",borderCollapse:"collapse" }}>
+                  <thead><tr>{["Date","Closer","Team","Product","Type","Outcome","Score",""].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+                  <tbody>{filteredReports.slice(0,100).map(r=>{ const t=teams[r.teamId]; return (
+                    <tr key={r.id}>
+                      <td style={S.td}>{fmtDate(r.date)}</td>
+                      <td style={{ ...S.td,fontWeight:600,color:C.text }}>{r.closerName}</td>
+                      <td style={S.td}>{t?`${teamTypeIcon(t.type)} ${t.name}`:"—"}</td>
+                      <td style={S.td}>{r.product||"—"}</td>
+                      <td style={S.td}>{r.callType==="whatsapp"?"💬":"📞"}</td>
+                      <td style={S.td}><span style={S.pill(outcomeColor(r.callOutcome))}>{outcomeLabel(r.callOutcome)}</span></td>
+                      <td style={S.td}><span style={S.pill(scoreColor(r.analysis?.overallScore||0))}>{r.analysis?.overallScore||"—"}</span></td>
+                      <td style={S.td}><button onClick={()=>setViewReport(r)} style={{ ...S.btnGhost,padding:"4px 10px",fontSize:11 }}>View</button></td>
+                    </tr>
+                  );})}
+                  </tbody>
+                </table>
+              </div>
+            }
+          </div>
+        )}
+
+        {tab==="manage"&&(
+          <div>
+            <div style={{ display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20,flexWrap:"wrap",gap:10 }}>
+              <div><h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>⚙️ Manage Accounts</h1><p style={{ fontSize:13,color:C.muted }}>{Object.values(users).length} total accounts</p></div>
+              <button style={S.btn} onClick={()=>setShowAdd(!showAdd)}>{showAdd?"✕ Cancel":"＋ Add Account"}</button>
+            </div>
+            {showAdd&&(
+              <div style={{ ...S.card,background:"rgba(0,229,160,0.04)",border:"1px solid rgba(0,229,160,0.15)",marginBottom:20 }}>
+                <div style={{ fontSize:13,fontWeight:700,color:C.green,marginBottom:14 }}>New Account</div>
+                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:12,marginBottom:14 }}>
+                  <div><label style={S.label}>Full Name</label><input style={S.input} placeholder="Full name" value={newName} onChange={e=>setNewName(e.target.value)}/></div>
+                  <div><label style={S.label}>4-Digit PIN</label><input style={S.input} placeholder="e.g. 2009" maxLength={4} value={newPin} onChange={e=>setNewPin(e.target.value.replace(/\D/g,"").slice(0,4))}/></div>
+                  <div><label style={S.label}>Role</label>
+                    <select style={S.select} value={newRole} onChange={e=>setNewRole(e.target.value)}>
+                      <option value="closer">Sales Closer</option><option value="teamlead">Team Lead</option>
+                      <option value="head_sales">Head of Sales</option><option value="hr">HR Manager</option>
+                      <option value="gm">General Manager</option><option value="head_creative">Head of Creative</option>
+                    </select>
+                  </div>
+                  {["closer","teamlead"].includes(newRole)&&<div><label style={S.label}>Team</label>
+                    <select style={S.select} value={newTeam} onChange={e=>setNewTeam(e.target.value)}>
+                      {teamList.map(t=><option key={t.id} value={t.id}>{teamTypeIcon(t.type)} {t.name}</option>)}
+                    </select>
+                  </div>}
+                </div>
+                <button style={{ ...S.btn,opacity:(!newName.trim()||newPin.length!==4)?0.5:1 }} disabled={!newName.trim()||newPin.length!==4||saving} onClick={addUser}>{saving?"Creating...":"✅ Create Account"}</button>
+              </div>
+            )}
+            <div style={S.card}>
+              <table style={{ width:"100%",borderCollapse:"collapse" }}>
+                <thead><tr>{["Name","Role","Team","PIN",""].map(h=><th key={h} style={S.th}>{h}</th>)}</tr></thead>
+                <tbody>{Object.values(users).map(u=>{ const a=accent(u.role); return (
+                  <tr key={u.id}>
+                    <td style={{ ...S.td,fontWeight:600,color:C.text }}>
+                      <div style={{ display:"flex",alignItems:"center",gap:8 }}>
+                        <div style={{ width:26,height:26,borderRadius:7,background:`${a}18`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:800,color:a }}>{u.name.split(" ").map(w=>w[0]).join("").slice(0,2)}</div>
+                        {u.name}
+                      </div>
+                    </td>
+                    <td style={S.td}><span style={S.pill(a)}>{ROLE_LABELS[u.role]}</span></td>
+                    <td style={S.td}>{teams[u.teamId]?`${teamTypeIcon(teams[u.teamId]?.type)} ${teams[u.teamId]?.name}`:"—"}</td>
+                    <td style={{ ...S.td,fontFamily:"monospace",letterSpacing:"0.15em",color:C.muted }}>{u.pin}</td>
+                    <td style={S.td}>{u.id!==user.id&&<button onClick={()=>removeUser(u.id)} style={{ ...S.btnDanger,padding:"4px 10px",fontSize:11 }}>Remove</button>}</td>
+                  </tr>
+                );})}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </main>
+      {viewReport&&<ReportModal report={viewReport} onClose={()=>setViewReport(null)}/>}
+    </div>
+  );
+}
+
+// ─── PIN PAD ──────────────────────────────────────────────────────────────────
+function PinPad({ users, onSuccess }) {
+  const [pin,setPin]=useState(""); const [sel,setSel]=useState(null); const [shake,setShake]=useState(false);
+  const all=Object.values(users).sort((a,b)=>{ const o={ceo:0,gm:1,head_sales:2,head_creative:3,hr:4,teamlead:5,closer:6}; return (o[a.role]||9)-(o[b.role]||9); });
+  const press=d=>{ if(pin.length>=4) return; const next=pin+d; setPin(next); if(next.length===4){ setTimeout(()=>{ const t=sel?(sel.pin===next?sel:null):all.find(u=>u.pin===next); if(t){onSuccess(t);setPin("");}else{setShake(true);setTimeout(()=>{setShake(false);setPin("");},600);} },120); } };
+  return (
+    <div style={{ minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans','Segoe UI',sans-serif" }}>
+      <div style={{ position:"fixed",inset:0,backgroundImage:`linear-gradient(rgba(0,229,160,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,160,0.02) 1px,transparent 1px)`,backgroundSize:"44px 44px",pointerEvents:"none" }}/>
+      <div style={{ position:"relative",zIndex:1,width:"100%",maxWidth:420,padding:"0 20px" }}>
+        <div style={{ textAlign:"center",marginBottom:26 }}>
+          <div style={{ width:52,height:52,borderRadius:14,background:`linear-gradient(135deg,${C.green},#00B37D)`,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:900,color:"#060A12",marginBottom:10 }}>SC</div>
+          <div style={{ fontSize:20,fontWeight:900,color:C.text }}>SalesCoach AI</div>
+          <div style={{ fontSize:10,color:C.green,textTransform:"uppercase",letterSpacing:"0.12em",fontWeight:600,marginTop:2 }}>HealthPlus Nigeria</div>
+        </div>
+        <div style={{ background:"rgba(255,255,255,0.03)",border:`1px solid ${C.border}`,borderRadius:20,padding:24 }}>
+          <div style={{ fontSize:13,fontWeight:800,color:C.text,textAlign:"center",marginBottom:3 }}>Welcome Back</div>
+          <div style={{ fontSize:11,color:C.muted,textAlign:"center",marginBottom:18 }}>Select your name · enter PIN</div>
+          <div style={{ maxHeight:210,overflowY:"auto",marginBottom:18,display:"flex",flexDirection:"column",gap:4 }}>
+            {all.map(u=>{ const a=accent(u.role); const t=SEED_TEAMS[u.teamId]; return (
+              <div key={u.id} onClick={()=>{setSel(u);setPin("");}} style={{ display:"flex",alignItems:"center",gap:9,padding:"7px 11px",borderRadius:9,cursor:"pointer",border:`1px solid ${sel?.id===u.id?a:"rgba(255,255,255,0.06)"}`,background:sel?.id===u.id?`${a}10`:"rgba(255,255,255,0.02)",transition:"all 0.15s" }}>
+                <div style={{ width:28,height:28,borderRadius:7,background:`${a}18`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,color:a,flexShrink:0 }}>{u.name.split(" ").map(w=>w[0]).join("").slice(0,2)}</div>
+                <div style={{ flex:1 }}><div style={{ fontSize:12,fontWeight:600,color:C.text }}>{u.name}</div><div style={{ fontSize:10,color:C.muted }}>{ROLE_LABELS[u.role]}{t?` · ${teamTypeIcon(t.type)} ${t.name}`:""}</div></div>
+                {sel?.id===u.id&&<div style={{ color:a,fontSize:13 }}>✓</div>}
+              </div>
+            );})}
+          </div>
+          <style>{`@keyframes shake{0%,100%{transform:translateX(0)}25%,75%{transform:translateX(-5px)}50%{transform:translateX(5px)}}`}</style>
+          <div style={{ display:"flex",justifyContent:"center",gap:11,marginBottom:20,animation:shake?"shake 0.5s ease":"none" }}>
+            {[0,1,2,3].map(i=><div key={i} style={{ width:12,height:12,borderRadius:"50%",background:i<pin.length?C.green:"rgba(255,255,255,0.1)",transition:"background 0.15s" }}/>)}
+          </div>
+          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8 }}>
+            {[1,2,3,4,5,6,7,8,9,"",0,"⌫"].map((d,i)=>(
+              <button key={i} onClick={()=>d==="⌫"?setPin(p=>p.slice(0,-1)):d!==""&&press(String(d))} disabled={d===""} style={{ height:48,borderRadius:11,border:"1px solid rgba(255,255,255,0.08)",background:d==="⌫"?"rgba(255,107,107,0.08)":"rgba(255,255,255,0.04)",color:d==="⌫"?C.red:C.text,fontSize:17,fontWeight:700,cursor:d===""?"default":"pointer",opacity:d===""?0:1,fontFamily:"inherit" }}>{d}</button>
+            ))}
+          </div>
+          <div style={{ textAlign:"center",marginTop:12,fontSize:11,color:C.muted }}>{sel?`Enter PIN for ${sel.name.split(" ")[0]}`:"Select your name above"}</div>
+        </div>
+        <div style={{ textAlign:"center",marginTop:12,fontSize:10,color:"rgba(255,255,255,0.1)" }}>Mgmt: 0001–0005 · Leads: 1001–1005 · Closers: 2001–2008</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── ROOT ─────────────────────────────────────────────────────────────────────
+function App() {
+  const [ready,setReady]=useState(false);
+  const [users,setUsers]=useState({});
+  const [teams,setTeams]=useState({});
+  const [reports,setReports]=useState([]);
+  const [logs,setLogs]=useState([]);
+  const [noAnswers,setNoAnswers]=useState([]);
+  const [currentUser,setCurrentUser]=useState(null);
+  const refresh=async()=>{ const [u,t,r,l,n]=await Promise.all([getUsers(),getTeams(),getReports(),getDailyLogs(),getNoAnswers()]); setUsers(u);setTeams(t);setReports(r);setLogs(l);setNoAnswers(n); };
+  useEffect(()=>{ (async()=>{ await seedIfEmpty(); await refresh(); setReady(true); })(); },[]);
+  if(!ready) return <div style={{ minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans','Segoe UI',sans-serif",color:C.text }}><div style={{ textAlign:"center" }}><div style={{ fontSize:34,marginBottom:10 }}>⚡</div><div style={{ fontSize:13,color:C.muted }}>Loading SalesCoach AI...</div></div></div>;
+  if(!currentUser) return <PinPad users={users} onSuccess={u=>setCurrentUser(u)}/>;
+  const props={ user:currentUser, users, teams, allReports:reports, allLogs:logs, allNoAnswers:noAnswers, onLogout:()=>setCurrentUser(null), refresh };
+  const role=currentUser.role;
+  if(role==="closer") return <CloserPortal {...props}/>;
+  if(role==="teamlead") return <TeamLeadPortal {...props}/>;
+  return <ManagementDashboard {...props} saveUsersData={async u=>{await saveUsers(u);setUsers(u);}}/>;
+}
+
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App/>);
+  </script>
+</body>
+</html>
