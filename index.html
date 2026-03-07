@@ -951,7 +951,7 @@ function TeamLeadPortal({ user, users, teams, allReports, allLogs, allNoAnswers,
         <div style={{ display:"flex",gap:3 }}>
           {nb("team","👥 My Team")}
           {nb("analyses","🧠 AI Analyses")}
-          {teamType!=="socialmedia"&&nb("approve","⏳ Approvals")}
+          {teamType!=="socialmedia"&&nb("approve", pendingLogs.length>0?`⏳ Approvals (${pendingLogs.length})`:"⏳ Approvals")}
           {nb("mycalls","🎙️ My Calls")}
           {nb("mylog","📋 "+(teamType==="socialmedia"?"Team Log":"My Log"))}
         </div>
@@ -1583,6 +1583,8 @@ function App() {
   const refresh=async()=>{
     try {
       const [u,t,r,l,n]=await Promise.all([getUsers(),getTeams(),getReports(),getDailyLogs(),getNoAnswers()]);
+      console.log("REFRESH users:",u?Object.keys(u).length:0,"logs:",Array.isArray(l)?l.length:l,"teams:",t?Object.keys(t).length:0);
+      if(l&&l.length>0) console.log("FIRST LOG:",JSON.stringify(l[0]));
       if(u&&Object.keys(u).length>0) setUsers(u);
       if(t&&Object.keys(t).length>0) setTeams(t);
       setReports(Array.isArray(r)?r:[]);
