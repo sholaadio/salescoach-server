@@ -7,6 +7,7 @@
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Shoppyrex SalesCoach"/>
   <meta name="theme-color" content="#F97316"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
@@ -23,37 +24,14 @@
     @keyframes fadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
     @keyframes spin { to{transform:rotate(360deg)} }
     .fade-up { animation:fadeUp 0.35s ease both; }
-
-    /* ─── MOBILE ─── */
     @media (max-width:768px) {
-      /* Nav: scrollable */
       nav { padding:0 8px !important; overflow-x:auto; -webkit-overflow-scrolling:touch; }
       nav::-webkit-scrollbar { display:none; }
-      /* Reduce nav tab font */
       nav button { font-size:11px !important; padding:6px 10px !important; white-space:nowrap; }
-      /* Main content padding */
       main { padding:16px 12px !important; }
-      /* Stat cards: 2 columns */
-      .stat-grid { grid-template-columns:1fr 1fr !important; gap:10px !important; }
-      /* 3-col grids → 1 col */
-      .grid-3 { grid-template-columns:1fr !important; }
-      /* 2-col grids → 1 col */
-      .grid-2 { grid-template-columns:1fr !important; }
-      /* Report modal score+skills */
-      .report-top { grid-template-columns:1fr !important; }
-      /* YouTube embeds full width */
-      .yt-grid { grid-template-columns:1fr !important; }
-      /* Form inputs */
       select, input, textarea { font-size:16px !important; }
-      button { min-height:44px; }
-      /* Headings smaller */
+      button { min-height:40px; }
       h1 { font-size:20px !important; }
-      /* Period filter wraps */
-      .period-row { flex-wrap:wrap !important; gap:6px !important; }
-    }
-    @media (max-width:480px) {
-      .stat-grid { grid-template-columns:1fr 1fr !important; }
-      nav { height:auto !important; padding:8px !important; flex-wrap:nowrap !important; }
     }
   </style>
 </head>
@@ -373,8 +351,9 @@ function ReportModal({ report, onClose }) {
             <div style={{fontSize:18,fontWeight:800,color:C.text,fontFamily:'Syne,sans-serif',lineHeight:1.2}}>{closerName} — AI Coach Report</div>
             <div style={{fontSize:12,color:C.muted,marginTop:3}}>{callType==='whatsapp'?'💬 WhatsApp':'📞 Phone'} · {product||'—'} · {fmtDate(date)}</div>
           </div>
-          <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
             <span style={S.pill(outcomeColor(callOutcome))}>{outcomeLabel(callOutcome)}</span>
+            <WhatsAppShareBtn report={report} user={{name:closerName}}/>
             <button onClick={onClose} style={{background:'rgba(255,255,255,0.1)',border:'none',borderRadius:8,padding:'8px 18px',color:C.text,cursor:'pointer',fontSize:13,fontWeight:600}}>✕ Close</button>
           </div>
         </div>
@@ -838,9 +817,413 @@ function CallUploadSection({ user, teams, refresh }) {
   );
 }
 // ─── CLOSER PORTAL ────────────────────────────────────────────────────────────
+
+// ─── PWA INSTALL PROMPT ───────────────────────────────────────
+function PWAInstallBanner() {
+  const [deferredPrompt,setDeferredPrompt]=useState(null);
+  const [show,setShow]=useState(false);
+  useEffect(()=>{
+    const handler=e=>{e.preventDefault();setDeferredPrompt(e);setShow(true);};
+    window.addEventListener('beforeinstallprompt',handler);
+    return()=>window.removeEventListener('beforeinstallprompt',handler);
+  },[]);
+  if(!show) return null;
+  return (
+    <div style={{position:'fixed',bottom:16,left:'50%',transform:'translateX(-50%)',zIndex:9999,background:'linear-gradient(135deg,#1a1f2e,#0d1117)',border:'1px solid rgba(249,115,22,0.4)',borderRadius:16,padding:'14px 20px',display:'flex',alignItems:'center',gap:14,boxShadow:'0 8px 32px rgba(0,0,0,0.6)',maxWidth:360,width:'calc(100% - 32px)'}}>
+      <img src={LOGO_SRC} style={{width:36,height:36,borderRadius:8,flexShrink:0}}/>
+      <div style={{flex:1}}>
+        <div style={{fontSize:13,fontWeight:700,color:'#F1F5FF'}}>Install SalesCoach</div>
+        <div style={{fontSize:11,color:'#6A7A90',marginTop:2}}>Add to home screen for quick access</div>
+      </div>
+      <button onClick={async()=>{if(deferredPrompt){deferredPrompt.prompt();const r=await deferredPrompt.userChoice;setShow(false);}}} style={{background:'#F97316',border:'none',borderRadius:10,padding:'8px 14px',color:'#fff',fontWeight:700,fontSize:12,cursor:'pointer',flexShrink:0}}>Install</button>
+      <button onClick={()=>setShow(false)} style={{background:'transparent',border:'none',color:'#6A7A90',cursor:'pointer',fontSize:16,flexShrink:0}}>✕</button>
+    </div>
+  );
+}
+
+// ─── DARK/LIGHT MODE ─────────────────────────────────────────
+const THEMES = {
+  dark: { bg:'#07080F', card:'rgba(255,255,255,0.04)', border:'rgba(255,255,255,0.07)', text:'#F1F5FF', soft:'#C8D3E8', muted:'#6A7A90', green:'#00E5A0', yellow:'#FBBF24', red:'#FF6B6B', orange:'#F97316', navBg:'rgba(6,10,18,0.97)' },
+  light: { bg:'#F4F6FB', card:'rgba(255,255,255,0.95)', border:'rgba(0,0,0,0.08)', text:'#0A0E1A', soft:'#1a2035', muted:'#7A8899', green:'#059669', yellow:'#D97706', red:'#DC2626', orange:'#EA580C', navBg:'rgba(255,255,255,0.97)' }
+};
+let _themeMode = localStorage.getItem("sc_theme")||"dark";
+let _C = {...THEMES[_themeMode]};
+// We'll merge with C at runtime
+
+// ─── PERFORMANCE TREND CHART ─────────────────────────────────
+function TrendChart({ reports }) {
+  if(!reports||reports.length<2) return (
+    <div style={{...S.card,padding:'20px',textAlign:'center',color:C.muted,fontSize:13}}>
+      Upload at least 2 calls to see your performance trend 📈
+    </div>
+  );
+  const sorted=[...reports].sort((a,b)=>a.date-b.date).slice(-30);
+  const max=100, min=0, w=500, h=120, pad=10;
+  const pts=sorted.map((r,i)=>({
+    x:pad+(i/(sorted.length-1||1))*(w-pad*2),
+    y:h-pad-((r.analysis?.overallScore||0)-min)/(max-min)*(h-pad*2),
+    score:r.analysis?.overallScore||0,
+    date:fmtDate(r.date),
+    product:r.product||'—'
+  }));
+  const pathD=pts.map((p,i)=>(i===0?`M${p.x},${p.y}`:`L${p.x},${p.y}`)).join(' ');
+  const areaD=`${pathD} L${pts[pts.length-1].x},${h} L${pts[0].x},${h} Z`;
+  const avg=Math.round(sorted.reduce((s,r)=>s+(r.analysis?.overallScore||0),0)/sorted.length);
+  const trend=sorted.length>1?(sorted[sorted.length-1].analysis?.overallScore||0)-(sorted[0].analysis?.overallScore||0):0;
+  return (
+    <div style={{...S.card,padding:'20px'}}>
+      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:16,flexWrap:'wrap',gap:8}}>
+        <div style={{fontSize:14,fontWeight:700,color:C.text}}>📈 Performance Trend (Last 30 days)</div>
+        <div style={{display:'flex',gap:16}}>
+          <div style={{textAlign:'center'}}><div style={{fontSize:10,color:C.muted,textTransform:'uppercase'}}>Avg Score</div><div style={{fontSize:18,fontWeight:800,color:avg>=70?C.green:avg>=50?C.yellow:C.red}}>{avg}</div></div>
+          <div style={{textAlign:'center'}}><div style={{fontSize:10,color:C.muted,textTransform:'uppercase'}}>Trend</div><div style={{fontSize:18,fontWeight:800,color:trend>=0?C.green:C.red}}>{trend>=0?'+':''}{trend}</div></div>
+        </div>
+      </div>
+      <svg viewBox={`0 0 ${w} ${h}`} style={{width:'100%',height:120,overflow:'visible'}}>
+        <defs>
+          <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={C.orange} stopOpacity="0.3"/>
+            <stop offset="100%" stopColor={C.orange} stopOpacity="0"/>
+          </linearGradient>
+        </defs>
+        {[0,25,50,75,100].map(v=>{
+          const y=h-pad-((v-min)/(max-min))*(h-pad*2);
+          return <line key={v} x1={pad} y1={y} x2={w-pad} y2={y} stroke="rgba(255,255,255,0.05)" strokeWidth="1"/>;
+        })}
+        <path d={areaD} fill="url(#trendGrad)"/>
+        <path d={pathD} fill="none" stroke={C.orange} strokeWidth="2.5" strokeLinejoin="round" strokeLinecap="round"/>
+        {pts.map((p,i)=>(
+          <g key={i}>
+            <circle cx={p.x} cy={p.y} r="4" fill={p.score>=70?C.green:p.score>=50?C.yellow:C.red} stroke={C.bg} strokeWidth="2"/>
+          </g>
+        ))}
+      </svg>
+      <div style={{display:'flex',justifyContent:'space-between',marginTop:4}}>
+        <span style={{fontSize:10,color:C.muted}}>{pts[0]?.date}</span>
+        <span style={{fontSize:10,color:C.muted}}>{pts[pts.length-1]?.date}</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── DAILY REMINDER BANNER ────────────────────────────────────
+function DailyReminderBanner({ user, allLogs }) {
+  const todayLogged=allLogs.some(l=>l.closerId===user.id&&l.date===todayStr());
+  if(todayLogged) return null;
+  const hr=new Date().getHours();
+  if(hr<8) return null; // don't show early morning
+  return (
+    <div style={{background:'linear-gradient(135deg,rgba(249,115,22,0.15),rgba(251,191,36,0.1))',border:'1px solid rgba(249,115,22,0.3)',borderRadius:12,padding:'12px 18px',marginBottom:16,display:'flex',alignItems:'center',gap:12}}>
+      <span style={{fontSize:22}}>⏰</span>
+      <div style={{flex:1}}>
+        <div style={{fontSize:13,fontWeight:700,color:'#FB923C'}}>You haven't logged today's calls yet!</div>
+        <div style={{fontSize:12,color:C.muted,marginTop:2}}>Tap Daily Log to record today's performance before the day ends.</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── TEAM LEAD APPROVAL BADGE ─────────────────────────────────
+function ApprovalBadge({ count }) {
+  if(!count||count===0) return null;
+  return <span style={{background:'#EF4444',color:'#fff',borderRadius:99,padding:'1px 7px',fontSize:10,fontWeight:800,marginLeft:4,verticalAlign:'middle'}}>{count}</span>;
+}
+
+// ─── AI SUMMARY REPORT GENERATOR ─────────────────────────────
+function AISummaryReport({ user, allReports, teamType }) {
+  const [period,setPeriod]=useState('today');
+  const [loading,setLoading]=useState(false);
+  const [summary,setSummary]=useState(null);
+  const [error,setError]=useState('');
+
+  const periodLabel={today:"Today's",week:"This Week's",month:"This Month's"};
+  const getReports=()=>{
+    const now=Date.now();
+    const todayStart=new Date(); todayStart.setHours(0,0,0,0);
+    const weekStart=new Date(); weekStart.setDate(weekStart.getDate()-7); weekStart.setHours(0,0,0,0);
+    const monthStart=new Date(); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+    if(period==='today') return allReports.filter(r=>r.date>=todayStart.getTime());
+    if(period==='week') return allReports.filter(r=>r.date>=weekStart.getTime());
+    return allReports.filter(r=>r.date>=monthStart.getTime());
+  };
+
+  const generate=async()=>{
+    const reports=getReports();
+    if(reports.length===0){setError('No call reports found for this period. Upload some calls first!');return;}
+    setLoading(true);setError('');setSummary(null);
+    try {
+      const callData=reports.map((r,i)=>`CALL ${i+1}: Product=${r.product||'—'}, Outcome=${r.callOutcome}, Score=${r.analysis?.overallScore||0}/100
+Verdict: ${r.analysis?.verdict||'—'}
+Strengths: ${(r.analysis?.strengths||[]).join('; ')}
+Weaknesses: ${(r.analysis?.weaknesses||[]).join('; ')}`).join('\n\n');
+
+      const prompt=`You are an expert Nigerian sales coach. Based on ${reports.length} calls by ${user.name} for ${periodLabel[period].toLowerCase()} period, write a comprehensive performance summary.
+
+INDIVIDUAL CALL DATA:
+${callData}
+
+Return ONLY valid JSON:
+{
+  "headline": "<punchy 1-line summary of overall performance>",
+  "overallScore": <weighted average 0-100>,
+  "grade": "<A+/A/B+/B/C/D/F>",
+  "totalCalls": ${reports.length},
+  "topStrengths": ["<pattern strength 1>","<pattern strength 2>","<pattern strength 3>"],
+  "criticalWeaknesses": ["<recurring weakness 1>","<recurring weakness 2>","<recurring weakness 3>"],
+  "keyInsight": "<the single most important insight from all calls combined>",
+  "actionPlan": ["<specific action 1 with example>","<specific action 2>","<specific action 3>"],
+  "tomorrowFocus": "<1 thing to focus on for next session>",
+  "motivationalNote": "<short encouraging note in Nigerian sales culture style>"
+}`;
+
+      const res=await fetch(`${SERVER}/analyze-summary`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({prompt,closerName:user.name})});
+      const data=await res.json();
+      if(!res.ok) throw new Error(data.error||'Failed');
+      setSummary(data.analysis);
+    } catch(e){setError(e.message||'Failed to generate summary');}
+    setLoading(false);
+  };
+
+  const shareToWhatsApp=(text)=>{
+    const url=`https://wa.me/?text=${encodeURIComponent(text)}`;
+    window.open(url,'_blank');
+  };
+
+  const summaryText=summary?`🏆 ${periodLabel[period]} SALES PERFORMANCE SUMMARY
+👤 ${user.name}
+
+📊 Overall Score: ${summary.overallScore}/100 (${summary.grade})
+📞 Total Calls: ${summary.totalCalls}
+
+💡 ${summary.headline}
+
+💪 TOP STRENGTHS:
+${(summary.topStrengths||[]).map((s,i)=>`${i+1}. ${s}`).join('\n')}
+
+⚠️ AREAS TO IMPROVE:
+${(summary.criticalWeaknesses||[]).map((w,i)=>`${i+1}. ${w}`).join('\n')}
+
+🎯 KEY INSIGHT:
+${summary.keyInsight}
+
+📋 ACTION PLAN:
+${(summary.actionPlan||[]).map((a,i)=>`${i+1}. ${a}`).join('\n')}
+
+🌅 TOMORROW'S FOCUS:
+${summary.tomorrowFocus}
+
+💪 ${summary.motivationalNote}
+
+— Shoppyrex SalesCoach AI`:null;
+
+  const gradeColor=g=>g?.startsWith('A')?C.green:g?.startsWith('B')?C.yellow:C.red;
+
+  return (
+    <div>
+      <div style={{...S.card,marginBottom:16}}>
+        <div style={{fontSize:15,fontWeight:800,color:C.text,marginBottom:4,fontFamily:'Syne,sans-serif'}}>🤖 AI Performance Summary</div>
+        <div style={{fontSize:12,color:C.muted,marginBottom:16}}>Generate a comprehensive AI report from all your call uploads</div>
+        <div style={{display:'flex',gap:8,marginBottom:16,flexWrap:'wrap'}}>
+          {['today','week','month'].map(p=>(
+            <button key={p} onClick={()=>{setPeriod(p);setSummary(null);}} style={{background:period===p?C.orange:'rgba(255,255,255,0.06)',color:period===p?'#fff':C.soft,border:'none',borderRadius:8,padding:'8px 16px',fontSize:13,fontWeight:600,cursor:'pointer'}}>
+              {p==='today'?'📅 Today':p==='week'?'📆 This Week':'🗓️ This Month'}
+            </button>
+          ))}
+        </div>
+        <div style={{fontSize:12,color:C.muted,marginBottom:14}}>
+          {getReports().length} call reports found for {periodLabel[period].toLowerCase()} period
+        </div>
+        <button onClick={generate} disabled={loading||getReports().length===0} style={{...S.btn,width:'100%',padding:'13px',fontSize:14,opacity:loading||getReports().length===0?0.5:1}}>
+          {loading?'🤖 Analyzing all calls...':'✨ Generate AI Summary Report'}
+        </button>
+        {error&&<div style={{color:C.red,fontSize:12,marginTop:10}}>⚠️ {error}</div>}
+      </div>
+
+      {loading&&<div style={{...S.card,textAlign:'center',padding:'40px'}}>
+        <div style={{fontSize:24,marginBottom:12}}>🤖</div>
+        <div style={{fontSize:14,color:C.soft,fontWeight:600}}>Analyzing {getReports().length} calls...</div>
+        <div style={{fontSize:12,color:C.muted,marginTop:6}}>Finding patterns, strengths and growth areas</div>
+      </div>}
+
+      {summary&&<div style={{...S.card,background:'rgba(249,115,22,0.04)',border:'1px solid rgba(249,115,22,0.2)'}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:20,flexWrap:'wrap',gap:10}}>
+          <div>
+            <div style={{fontSize:18,fontWeight:900,color:C.text,fontFamily:'Syne,sans-serif'}}>{periodLabel[period]} Summary Report</div>
+            <div style={{fontSize:12,color:C.muted,marginTop:2}}>{user.name} · {summary.totalCalls} calls analyzed</div>
+          </div>
+          <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+            <button onClick={()=>shareToWhatsApp(summaryText)} style={{background:'#25D366',border:'none',borderRadius:10,padding:'8px 16px',color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
+              <span>📲</span> Share to WhatsApp
+            </button>
+          </div>
+        </div>
+
+        {/* Score + Grade */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(100px,1fr))',gap:12,marginBottom:20}}>
+          {[
+            {l:'Score',v:`${summary.overallScore}/100`,c:summary.overallScore>=70?C.green:summary.overallScore>=50?C.yellow:C.red},
+            {l:'Grade',v:summary.grade,c:gradeColor(summary.grade)},
+            {l:'Calls',v:summary.totalCalls,c:C.text},
+            {l:'Period',v:periodLabel[period].replace("'s",''),c:C.orange}
+          ].map(x=>(
+            <div key={x.l} style={{background:'rgba(255,255,255,0.05)',borderRadius:12,padding:'14px',textAlign:'center'}}>
+              <div style={{fontSize:10,color:C.muted,textTransform:'uppercase',marginBottom:4}}>{x.l}</div>
+              <div style={{fontSize:24,fontWeight:900,color:x.c}}>{x.v}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Headline */}
+        <div style={{background:'rgba(0,229,160,0.06)',border:'1px solid rgba(0,229,160,0.15)',borderRadius:12,padding:'14px 18px',marginBottom:16,fontSize:15,color:C.soft,lineHeight:1.7,fontStyle:'italic'}}>
+          💡 "{summary.headline}"
+        </div>
+
+        {/* 3 columns */}
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',gap:14,marginBottom:16}}>
+          <div style={{background:'rgba(0,229,160,0.05)',border:'1px solid rgba(0,229,160,0.15)',borderRadius:12,padding:'14px'}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.green,marginBottom:10}}>💪 Top Strengths</div>
+            {(summary.topStrengths||[]).map((s,i)=><div key={i} style={{fontSize:13,color:C.soft,marginBottom:7,display:'flex',gap:6}}><span style={{color:C.green}}>›</span>{s}</div>)}
+          </div>
+          <div style={{background:'rgba(251,191,36,0.05)',border:'1px solid rgba(251,191,36,0.15)',borderRadius:12,padding:'14px'}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.yellow,marginBottom:10}}>⚠️ Must Improve</div>
+            {(summary.criticalWeaknesses||[]).map((w,i)=><div key={i} style={{fontSize:13,color:C.soft,marginBottom:7,display:'flex',gap:6}}><span style={{color:C.yellow}}>›</span>{w}</div>)}
+          </div>
+          <div style={{background:'rgba(96,165,250,0.05)',border:'1px solid rgba(96,165,250,0.15)',borderRadius:12,padding:'14px'}}>
+            <div style={{fontSize:12,fontWeight:700,color:'#60A5FA',marginBottom:10}}>🎯 Action Plan</div>
+            {(summary.actionPlan||[]).map((a,i)=><div key={i} style={{fontSize:13,color:C.soft,marginBottom:7,display:'flex',gap:6}}><span style={{color:'#60A5FA'}}>{i+1}.</span>{a}</div>)}
+          </div>
+        </div>
+
+        {/* Key insight */}
+        <div style={{background:'rgba(139,92,246,0.07)',border:'1px solid rgba(139,92,246,0.2)',borderRadius:12,padding:'14px 18px',marginBottom:12}}>
+          <div style={{fontSize:11,fontWeight:700,color:'#A78BFA',textTransform:'uppercase',marginBottom:6}}>🔍 Key Insight</div>
+          <div style={{fontSize:14,color:C.soft,lineHeight:1.7}}>{summary.keyInsight}</div>
+        </div>
+
+        {/* Tomorrow + motivation */}
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:12}}>
+          <div style={{background:'rgba(249,115,22,0.06)',border:'1px solid rgba(249,115,22,0.15)',borderRadius:12,padding:'14px'}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.orange,textTransform:'uppercase',marginBottom:6}}>🌅 Tomorrow's Focus</div>
+            <div style={{fontSize:13,color:C.soft,lineHeight:1.6}}>{summary.tomorrowFocus}</div>
+          </div>
+          <div style={{background:'rgba(37,211,102,0.06)',border:'1px solid rgba(37,211,102,0.15)',borderRadius:12,padding:'14px'}}>
+            <div style={{fontSize:11,fontWeight:700,color:'#25D366',textTransform:'uppercase',marginBottom:6}}>🔥 Coach Says</div>
+            <div style={{fontSize:13,color:C.soft,lineHeight:1.6,fontStyle:'italic'}}>{summary.motivationalNote}</div>
+          </div>
+        </div>
+      </div>}
+    </div>
+  );
+}
+
+// ─── WHATSAPP SHARE (single report) ──────────────────────────
+function WhatsAppShareBtn({ report, user }) {
+  const a=report.analysis||{};
+  const text=`🤖 AI CALL COACHING REPORT
+👤 ${user.name} | ${report.product||'—'} | ${fmtDate(report.date)}
+
+📊 Score: ${a.overallScore||0}/100
+📞 Type: ${report.callType==='whatsapp'?'WhatsApp':'Phone'} | Outcome: ${report.callOutcome||'—'}
+
+💡 Verdict: ${a.verdict||'—'}
+
+💪 Strengths:
+${(a.strengths||[]).map((s,i)=>`${i+1}. ${s}`).join('\n')}
+
+⚠️ Weaknesses:
+${(a.weaknesses||[]).map((w,i)=>`${i+1}. ${w}`).join('\n')}
+
+🎯 Action Steps:
+${(a.improvements||[]).map((x,i)=>`${i+1}. ${x}`).join('\n')}
+
+📍 Critical Moment: ${a.transcriptInsight||'—'}
+
+💬 Script to Memorize:
+${a.scriptSuggestion||'—'}
+
+— Shoppyrex SalesCoach AI`;
+  return (
+    <a href={`https://wa.me/?text=${encodeURIComponent(text)}`} target="_blank" rel="noreferrer"
+      style={{display:'inline-flex',alignItems:'center',gap:6,background:'#25D366',border:'none',borderRadius:10,padding:'8px 16px',color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer',textDecoration:'none'}}>
+      📲 Share on WhatsApp
+    </a>
+  );
+}
+
+// ─── ONBOARDING FLOW ─────────────────────────────────────────
+function OnboardingModal({ user, onDone }) {
+  const [step,setStep]=useState(0);
+  const steps=[
+    {icon:'📊',title:'Welcome to Your Dashboard',desc:'Your dashboard shows your total calls, AI score, earnings and delivery rate. Check it every day to track your progress.',tip:'Tip: Aim for 90%+ delivery rate to qualify for the Excellence Pool bonus!'},
+    {icon:'📋',title:'How to Log Your Daily Calls',desc:'After your shift, go to Daily Log and fill in how many orders were assigned, confirmed, delivered, and any upsells or referrals.',tip:'Tip: Your team lead approves your log before commission is counted.'},
+    {icon:'🎙️',title:'How to Upload a Call Recording',desc:'Record your sales call, then go to Upload Call. Select the call type, outcome, product, and upload the audio. Claude AI will score you and give you personal coaching!',tip:'Tip: The more calls you upload, the faster you improve. Try to upload at least 2 per day.'},
+  ];
+  const s=steps[step];
+  return (
+    <div style={{position:'fixed',inset:0,zIndex:2000,background:'rgba(0,0,0,0.95)',backdropFilter:'blur(10px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+      <div style={{background:'#0C1320',border:'1px solid rgba(249,115,22,0.3)',borderRadius:20,maxWidth:420,width:'100%',padding:'32px 28px',textAlign:'center'}}>
+        <div style={{fontSize:52,marginBottom:16}}>{s.icon}</div>
+        <div style={{fontSize:8,fontWeight:700,color:C.orange,textTransform:'uppercase',letterSpacing:'0.12em',marginBottom:8}}>STEP {step+1} OF {steps.length}</div>
+        <div style={{fontSize:20,fontWeight:900,color:C.text,fontFamily:'Syne,sans-serif',marginBottom:12,lineHeight:1.3}}>{s.title}</div>
+        <div style={{fontSize:14,color:C.soft,lineHeight:1.7,marginBottom:16}}>{s.desc}</div>
+        <div style={{background:'rgba(249,115,22,0.08)',border:'1px solid rgba(249,115,22,0.2)',borderRadius:10,padding:'10px 14px',fontSize:12,color:'#FB923C',marginBottom:24,lineHeight:1.6}}>{s.tip}</div>
+        {/* Progress dots */}
+        <div style={{display:'flex',justifyContent:'center',gap:8,marginBottom:24}}>
+          {steps.map((_,i)=><div key={i} style={{width:8,height:8,borderRadius:99,background:i<=step?C.orange:'rgba(255,255,255,0.1)'}}/>)}
+        </div>
+        <div style={{display:'flex',gap:10}}>
+          {step>0&&<button onClick={()=>setStep(s=>s-1)} style={{flex:1,background:'rgba(255,255,255,0.07)',border:'none',borderRadius:10,padding:'12px',color:C.soft,cursor:'pointer',fontSize:14,fontWeight:600}}>← Back</button>}
+          {step<steps.length-1
+            ?<button onClick={()=>setStep(s=>s+1)} style={{flex:1,background:C.orange,border:'none',borderRadius:10,padding:'12px',color:'#fff',cursor:'pointer',fontSize:14,fontWeight:700}}>Next →</button>
+            :<button onClick={onDone} style={{flex:1,background:'linear-gradient(135deg,#00E5A0,#00B37A)',border:'none',borderRadius:10,padding:'12px',color:'#fff',cursor:'pointer',fontSize:14,fontWeight:700}}>🚀 Let's Go!</button>
+          }
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── RESET PIN MODAL (CEO/GM) ─────────────────────────────────
+function ResetPinModal({ targetUser, onClose, saveUsersData, refresh, flash }) {
+  const [pin,setPin]=useState('');
+  const [saving,setSaving]=useState(false);
+  const save=async()=>{
+    if(pin.length!==4||!/^\d{4}$/.test(pin)){flash('PIN must be exactly 4 digits');return;}
+    setSaving(true);
+    const updated={...targetUser,pin};
+    const all=await getUsers();
+    all[targetUser.id]=updated;
+    await saveUsersData(all);
+    await refresh();
+    flash(`✅ PIN reset for ${targetUser.name}`);
+    onClose();
+    setSaving(false);
+  };
+  return (
+    <div style={{position:'fixed',inset:0,zIndex:2000,background:'rgba(0,0,0,0.85)',backdropFilter:'blur(8px)',display:'flex',alignItems:'center',justifyContent:'center',padding:16}}>
+      <div style={{background:'#0C1320',border:'1px solid rgba(249,115,22,0.3)',borderRadius:16,padding:'28px',maxWidth:340,width:'100%'}}>
+        <div style={{fontSize:16,fontWeight:800,color:C.text,marginBottom:4,fontFamily:'Syne,sans-serif'}}>🔑 Reset PIN</div>
+        <div style={{fontSize:13,color:C.muted,marginBottom:20}}>Setting new PIN for <strong style={{color:C.soft}}>{targetUser.name}</strong></div>
+        <label style={S.label}>New 4-Digit PIN</label>
+        <input style={{...S.input,marginBottom:20,fontSize:20,letterSpacing:'0.3em',textAlign:'center'}}
+          placeholder="0000" maxLength={4} value={pin}
+          onChange={e=>setPin(e.target.value.replace(/\D/g,'').slice(0,4))}/>
+        <div style={{display:'flex',gap:10}}>
+          <button onClick={onClose} style={{flex:1,background:'rgba(255,255,255,0.07)',border:'none',borderRadius:10,padding:'11px',color:C.soft,cursor:'pointer',fontSize:14,fontWeight:600}}>Cancel</button>
+          <button onClick={save} disabled={saving||pin.length!==4} style={{...S.btn,flex:1,opacity:saving||pin.length!==4?0.5:1}}>
+            {saving?'Saving...':'Save PIN'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, onLogout, refresh }) {
   const [tab,setTab]=useState("dashboard"); const [period,setPeriod]=useState("month");
   const [viewReport,setViewReport]=useState(null); const [saved,setSaved]=useState("");
+  const [showOnboarding,setShowOnboarding]=useState(()=>!localStorage.getItem("sc_onboarded_"+user.id));
+  const doneOnboarding=()=>{localStorage.setItem("sc_onboarded_"+user.id,"1");setShowOnboarding(false);};
   const myTeam=teams[user.teamId]; const teamType=myTeam?.type||"sales";
   const myReports=filterByPeriod(allReports.filter(r=>r.closerId===user.id),"date",period).sort((a,b)=>b.date-a.date);
   const allMyReports=allReports.filter(r=>r.closerId===user.id);
@@ -864,13 +1247,15 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, o
 
   return (
     <div style={{ minHeight:"100vh",background:C.bg,color:C.text,fontFamily:"'DM Sans','Segoe UI',sans-serif" }}>
+      {showOnboarding&&<OnboardingModal user={user} onDone={doneOnboarding}/>}
+      <PWAInstallBanner/>
       <div style={{ position:"fixed",inset:0,zIndex:0,pointerEvents:"none",backgroundImage:`linear-gradient(rgba(0,229,160,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,160,0.015) 1px,transparent 1px)`,backgroundSize:"44px 44px" }}/>
       <nav style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 24px",height:56,background:"rgba(6,10,18,0.97)",borderBottom:`1px solid rgba(0,229,160,0.1)`,position:"sticky",top:0,zIndex:100,backdropFilter:"blur(16px)" }}>
         <div style={{ display:"flex",alignItems:"center",gap:9 }}>
           <div style={{ width:30,height:30,borderRadius:8,background:`linear-gradient(135deg,${C.green},#EA580C)`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden" }}><img src={LOGO_SRC} style={{width:"100%",height:"100%",objectFit:"contain",borderRadius:8}}/></div>
           <div><div style={{ fontSize:13,fontWeight:800 }}>Shoppyrex SalesCoach</div><div style={{ fontSize:9,color:C.green,textTransform:"uppercase",letterSpacing:"0.1em",fontWeight:600 }}>{teamTypeIcon(teamType)} {myTeam?.name}</div></div>
         </div>
-        <div style={{ display:"flex",gap:3 }}>{nb("dashboard","📊 Dashboard")}{nb("upload","🎙️ Upload Call")}{nb("log","📋 Daily Log")}{teamType!=="socialmedia"&&nb("noanswer","📵 No Answer")}{nb("history","🕐 History")}</div>
+        <div style={{ display:"flex",gap:3 }}>{nb("dashboard","📊 Dashboard")}{nb("upload","🎙️ Upload Call")}{nb("log","📋 Daily Log")}{teamType!=="socialmedia"&&nb("noanswer","📵 No Answer")}{nb("history","🕐 History")}{nb("summary","✨ AI Summary")}</div>
         <div style={{ display:"flex",alignItems:"center",gap:10 }}>
           <div style={{ textAlign:"right" }}><div style={{ fontSize:12,fontWeight:700 }}>{user.name}</div><div style={{ fontSize:9,color:C.muted }}>Sales Closer</div></div>
           <button onClick={onLogout} style={{ background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 10px",color:C.muted,cursor:"pointer",fontSize:11 }}>Sign Out</button>
@@ -881,8 +1266,10 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, o
           <div>
             <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>Hey {user.name.split(" ")[0]} 👋</h1>
             <p style={{ fontSize:13,color:C.muted,marginBottom:16 }}>{teamTypeIcon(teamType)} {myTeam?.name}</p>
+            <DailyReminderBanner user={user} allLogs={allLogs}/>
             <PerformanceWarning logs={allLogs} userId={user.id}/>
             <PeriodFilter value={period} onChange={setPeriod}/>
+            {myReports.length>=2&&<div style={{marginBottom:16}}><TrendChart reports={myReports}/></div>}
             {todayLog&&<CommissionCard comm={todayLog.commission} label="Today's Commission"/>}
             <div style={{ ...S.g4,marginBottom:20 }}>
               {[
@@ -997,6 +1384,13 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, o
             }
           </div>
         )}
+        {tab==="summary"&&(
+          <div>
+            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4,fontFamily:'Syne,sans-serif' }}>✨ AI Summary Reports</h1>
+            <p style={{ fontSize:13,color:C.muted,marginBottom:20 }}>Get AI-powered performance insights across all your calls</p>
+            <AISummaryReport user={user} allReports={myReports} teamType={teamType}/>
+          </div>
+        )}
       </main>
       {viewReport&&<ReportModal report={viewReport} onClose={()=>setViewReport(null)}/>}
     </div>
@@ -1047,7 +1441,7 @@ function TeamLeadPortal({ user, users, teams, allReports, allLogs, allNoAnswers,
           {nb("analyses","🧠 AI Analyses")}
           {teamType!=="socialmedia"&&nb("approve", pendingLogs.length>0?`⏳ Approvals (${pendingLogs.length})`:"⏳ Approvals")}
           {nb("mycalls","🎙️ My Calls")}
-          {nb("mylog","📋 "+(teamType==="socialmedia"?"Team Log":"My Log"))}
+          {nb("mylog","📋 "+(teamType==="socialmedia"?"Team Log":"My Log"))}{nb("summary","✨ AI Summary")}
         </div>
         <div style={{ display:"flex",alignItems:"center",gap:10 }}>
           <div style={{ textAlign:"right" }}><div style={{ fontSize:12,fontWeight:700 }}>{user.name}</div><div style={{ fontSize:9,color:C.muted }}>Team Lead · {teamType==="socialmedia"?"Social Media":teamType==="followup"?"Follow-Up":"Sales"}</div></div>
@@ -1251,7 +1645,7 @@ function EditNameInline({uid,currentName,users,saveUsersData,refresh,flash}){
 function ManagementDashboard({ user, users, teams, allReports, allLogs, allNoAnswers, onLogout, refresh, saveUsersData }) {
   const [tab,setTab]=useState("overview"); const [period,setPeriod]=useState("month");
   const [viewReport,setViewReport]=useState(null); const [msg,setMsg]=useState("");
-  const [newName,setNewName]=useState(""); const [newPin,setNewPin]=useState(""); const [newRole,setNewRole]=useState("closer"); const [newTeam,setNewTeam]=useState("team1"); const [showAdd,setShowAdd]=useState(false); const [saving,setSaving]=useState(false);
+  const [newName,setNewName]=useState(""); const [newPin,setNewPin]=useState(""); const [newRole,setNewRole]=useState("closer"); const [newTeam,setNewTeam]=useState("team1"); const [showAdd,setShowAdd]=useState(false); const [saving,setSaving]=useState(false); const [resetPinTarget,setResetPinTarget]=useState(null); const [summaryTarget,setSummaryTarget]=useState(null);
   const flash=m=>{setMsg(m);setTimeout(()=>setMsg(""),3000);};
   const accentColor=accent(user.role); const teamList=Object.values(teams); const thisMonth=new Date().toISOString().slice(0,7);
   const closerList=Object.values(users).filter(u=>["closer","teamlead"].includes(u.role));
@@ -1301,7 +1695,7 @@ function ManagementDashboard({ user, users, teams, allReports, allLogs, allNoAns
           <div><div style={{ fontSize:13,fontWeight:800 }}>Shoppyrex SalesCoach</div><div style={{ fontSize:9,color:accentColor,textTransform:"uppercase",letterSpacing:"0.1em",fontWeight:600 }}>{ROLE_LABELS[user.role]}</div></div>
         </div>
         <div style={{ display:"flex",gap:2,flexWrap:"wrap" }}>
-          {nb("overview","📊 Overview")}{nb("teams","🏢 Teams")}{nb("analyses","🧠 Analyses")}{nb("leaderboard","🏆 Leaderboard")}{nb("commission","💰 Commission")}{nb("reports","📋 Reports")}{nb("manage","⚙️ Manage")}
+          {nb("overview","📊 Overview")}{nb("teams","🏢 Teams")}{nb("analyses","🧠 Analyses")}{nb("leaderboard","🏆 Leaderboard")}{nb("commission","💰 Commission")}{nb("reports","📋 Reports")}{nb("manage","⚙️ Manage")}{nb("summary","✨ AI Summary")}
         </div>
         <div style={{ display:"flex",alignItems:"center",gap:10 }}>
           <div style={{ textAlign:"right" }}><div style={{ fontSize:12,fontWeight:700 }}>{user.name}</div><div style={{ fontSize:9,color:C.muted }}>{ROLE_LABELS[user.role]}</div></div>
@@ -1606,7 +2000,7 @@ function ManagementDashboard({ user, users, teams, allReports, allLogs, allNoAns
                     <td style={S.td}><span style={S.pill(a)}>{ROLE_LABELS[u.role]}</span></td>
                     <td style={S.td}>{teams[u.teamId]?`${teamTypeIcon(teams[u.teamId]?.type)} ${teams[u.teamId]?.name}`:"—"}</td>
                     <td style={{ ...S.td,fontFamily:"monospace",letterSpacing:"0.15em",color:C.muted }}>{u.pin}</td>
-                    <td style={S.td}><div style={{display:"flex",gap:8}}>{canEditName(u)&&<EditNameInline uid={u.id} currentName={u.name} users={users} saveUsersData={saveUsersData} refresh={refresh} flash={flash}/>}{canRemove(u)&&<button onClick={()=>removeUser(u.id)} style={{...S.btnDanger,padding:"6px 14px",fontSize:13}}>Remove</button>}</div></td>
+                    <td style={S.td}><div style={{display:"flex",gap:8}}>{canEditName(u)&&<EditNameInline uid={u.id} currentName={u.name} users={users} saveUsersData={saveUsersData} refresh={refresh} flash={flash}/>}{["ceo","gm"].includes(user.role)&&<button onClick={()=>setResetPinTarget(u)} style={{background:"rgba(249,115,22,0.12)",border:"1px solid rgba(249,115,22,0.25)",borderRadius:8,padding:"6px 12px",color:C.orange,cursor:"pointer",fontSize:12,fontWeight:600}}>🔑 Reset PIN</button>}{canRemove(u)&&<button onClick={()=>removeUser(u.id)} style={{...S.btnDanger,padding:"6px 14px",fontSize:13}}>Remove</button>}</div></td>
                   </tr>
                 );})}
                 </tbody>
@@ -1614,8 +2008,31 @@ function ManagementDashboard({ user, users, teams, allReports, allLogs, allNoAns
             </div>
           </div>
         )}
+        {tab==="summary"&&(
+          <div>
+            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4,fontFamily:'Syne,sans-serif' }}>✨ AI Summary Reports</h1>
+            <p style={{ fontSize:13,color:C.muted,marginBottom:20 }}>Full team performance insights — day, week, month</p>
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:13,fontWeight:700,color:C.text,marginBottom:12 }}>Select a closer:</div>
+              <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginBottom:20 }}>
+                {[{id:"all",name:"🏢 All Staff"},...Object.values(users).filter(u=>["closer","teamlead"].includes(u.role))].map(u=>(
+                  <button key={u.id} onClick={()=>setSummaryTarget(u.id||"all")}
+                    style={{ background:summaryTarget===u.id?"rgba(249,115,22,0.2)":"rgba(255,255,255,0.05)", border:"1px solid "+(summaryTarget===u.id?"rgba(249,115,22,0.5)":"rgba(255,255,255,0.1)"), borderRadius:8, padding:"7px 14px", color:summaryTarget===u.id?C.orange:C.soft, cursor:"pointer", fontSize:12, fontWeight:600 }}>
+                    {u.name}
+                  </button>
+                ))}
+              </div>
+              {summaryTarget&&<AISummaryReport
+                user={summaryTarget==="all"?{name:"All Staff",id:"all"}:users[summaryTarget]||{name:"Unknown",id:summaryTarget}}
+                allReports={summaryTarget==="all"?allReports:allReports.filter(r=>r.closerId===summaryTarget)}
+                teamType="sales"
+              />}
+            </div>
+          </div>
+        )}
       </main>
       {viewReport&&<ReportModal report={viewReport} onClose={()=>setViewReport(null)}/>}
+      {resetPinTarget&&<ResetPinModal targetUser={resetPinTarget} onClose={()=>setResetPinTarget(null)} saveUsersData={saveUsersData} refresh={refresh} flash={flash}/>}
     </div>
   );
 }
