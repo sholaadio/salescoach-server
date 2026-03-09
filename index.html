@@ -7,27 +7,53 @@
   <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-  <meta name="apple-mobile-web-app-title" content="Shoppyrex SalesCoach"/>
   <meta name="theme-color" content="#F97316"/>
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link href="https://fonts.googleapis.com/css2?family=Syne:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <style>
     *, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
     body { background:#07080F; font-family:'DM Sans','Segoe UI',sans-serif; -webkit-tap-highlight-color:transparent; color:#F1F5FF; min-height:100vh; }
-    h1,h2,h3 { font-family:'Syne',sans-serif; letter-spacing:-0.02em; }
     input, select, textarea, button { font-family:'DM Sans','Segoe UI',sans-serif; }
     ::-webkit-scrollbar { width:5px; height:5px; }
     ::-webkit-scrollbar-track { background:transparent; }
     ::-webkit-scrollbar-thumb { background:rgba(249,115,22,0.35); border-radius:999px; }
-    body::before { content:''; position:fixed; top:-200px; left:-200px; width:600px; height:600px; background:radial-gradient(circle,rgba(249,115,22,0.08) 0%,transparent 70%); pointer-events:none; z-index:0; }
-    body::after { content:''; position:fixed; bottom:-200px; right:-200px; width:500px; height:500px; background:radial-gradient(circle,rgba(251,191,36,0.06) 0%,transparent 70%); pointer-events:none; z-index:0; }
+    body::before { content:''; position:fixed; top:-200px; left:-200px; width:700px; height:700px; background:radial-gradient(circle,rgba(249,115,22,0.07) 0%,transparent 70%); pointer-events:none; z-index:0; }
+    body::after { content:''; position:fixed; bottom:-200px; right:-200px; width:600px; height:600px; background:radial-gradient(circle,rgba(251,191,36,0.05) 0%,transparent 70%); pointer-events:none; z-index:0; }
     #root { position:relative; z-index:1; }
-    @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
-    @keyframes spin { to { transform:rotate(360deg); } }
-    .fade-up { animation:fadeUp 0.4s ease both; }
-    @media (max-width:640px) {
-      select, input { font-size:16px !important; min-height:44px; }
+    @keyframes fadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes spin { to{transform:rotate(360deg)} }
+    .fade-up { animation:fadeUp 0.35s ease both; }
+
+    /* ─── MOBILE ─── */
+    @media (max-width:768px) {
+      /* Nav: scrollable */
+      nav { padding:0 8px !important; overflow-x:auto; -webkit-overflow-scrolling:touch; }
+      nav::-webkit-scrollbar { display:none; }
+      /* Reduce nav tab font */
+      nav button { font-size:11px !important; padding:6px 10px !important; white-space:nowrap; }
+      /* Main content padding */
+      main { padding:16px 12px !important; }
+      /* Stat cards: 2 columns */
+      .stat-grid { grid-template-columns:1fr 1fr !important; gap:10px !important; }
+      /* 3-col grids → 1 col */
+      .grid-3 { grid-template-columns:1fr !important; }
+      /* 2-col grids → 1 col */
+      .grid-2 { grid-template-columns:1fr !important; }
+      /* Report modal score+skills */
+      .report-top { grid-template-columns:1fr !important; }
+      /* YouTube embeds full width */
+      .yt-grid { grid-template-columns:1fr !important; }
+      /* Form inputs */
+      select, input, textarea { font-size:16px !important; }
       button { min-height:44px; }
+      /* Headings smaller */
+      h1 { font-size:20px !important; }
+      /* Period filter wraps */
+      .period-row { flex-wrap:wrap !important; gap:6px !important; }
+    }
+    @media (max-width:480px) {
+      .stat-grid { grid-template-columns:1fr 1fr !important; }
+      nav { height:auto !important; padding:8px !important; flex-wrap:nowrap !important; }
     }
   </style>
 </head>
@@ -332,160 +358,183 @@ function CommissionCard({ comm, label="Today's Commission" }) {
 // ─── REPORT MODAL ─────────────────────────────────────────────────────────────
 function ReportModal({ report, onClose }) {
   const { analysis, closerName, callType, callOutcome, product, date } = report;
-  const ytSearch = q => `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
-  const podSearch = q => `https://open.spotify.com/search/${encodeURIComponent(q)}`;
-  const resourceIcon = t => t==="books"?"📖":t==="youtube"?"▶️":"🎙️";
-  const resourceLink = (t, item) => t==="youtube" ? ytSearch(item.title) : t==="podcasts" ? podSearch(item.title) : `https://www.google.com/search?q=${encodeURIComponent(item.title+" book")}`;
+  const ytId = v => (v && v !== 'undefined' && v.length === 11) ? v : null;
+  const ytSearchUrl = title => `https://www.youtube.com/results?search_query=${encodeURIComponent(title)}`;
+  const amazonUrl = title => `https://www.amazon.com/s?k=${encodeURIComponent(title)}&i=stripbooks`;
+  const spotifyUrl = (show,title) => `https://open.spotify.com/search/${encodeURIComponent((show||'')+(title||''))}`;
 
   return (
-    <div style={{ position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,0.92)",backdropFilter:"blur(8px)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"16px",overflowY:"auto",fontFamily:"'DM Sans','Segoe UI',sans-serif" }}>
-      <div style={{ width:"100%",maxWidth:860,background:"#0C1320",borderRadius:20,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:32 }}>
-        {/* Header */}
-        <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${C.border}`,background:"rgba(0,229,160,0.04)",flexWrap:"wrap",gap:10 }}>
+    <div onClick={e=>{if(e.target===e.currentTarget)onClose();}} style={{position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,0.93)',backdropFilter:'blur(8px)',overflowY:'auto',fontFamily:"'DM Sans','Segoe UI',sans-serif",padding:'0'}}>
+      <div style={{maxWidth:'100%',minHeight:'100vh',background:'#0A0E1A',display:'flex',flexDirection:'column'}}>
+
+        {/* Sticky Header */}
+        <div style={{position:'sticky',top:0,zIndex:10,background:'#0A0E1A',borderBottom:'1px solid rgba(249,115,22,0.2)',padding:'14px 20px',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:10}}>
           <div>
-            <div style={{ fontSize:17,fontWeight:800,color:C.text,fontFamily:"Syne,sans-serif" }}>{closerName} — AI Coach Report</div>
-            <div style={{ fontSize:12,color:C.muted,marginTop:2 }}>{callType==="whatsapp"?"💬 WhatsApp":"📞 Phone"} · {product||"—"} · {fmtDate(date)}</div>
+            <div style={{fontSize:18,fontWeight:800,color:C.text,fontFamily:'Syne,sans-serif',lineHeight:1.2}}>{closerName} — AI Coach Report</div>
+            <div style={{fontSize:12,color:C.muted,marginTop:3}}>{callType==='whatsapp'?'💬 WhatsApp':'📞 Phone'} · {product||'—'} · {fmtDate(date)}</div>
           </div>
-          <div style={{ display:"flex",gap:8,alignItems:"center",flexWrap:"wrap" }}>
+          <div style={{display:'flex',gap:8,alignItems:'center'}}>
             <span style={S.pill(outcomeColor(callOutcome))}>{outcomeLabel(callOutcome)}</span>
-            <button onClick={onClose} style={{ background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,padding:"8px 16px",color:C.soft,cursor:"pointer",fontSize:13,fontWeight:600 }}>✕ Close</button>
+            <button onClick={onClose} style={{background:'rgba(255,255,255,0.1)',border:'none',borderRadius:8,padding:'8px 18px',color:C.text,cursor:'pointer',fontSize:13,fontWeight:600}}>✕ Close</button>
           </div>
         </div>
 
-        <div style={{ padding:"20px" }}>
+        {/* Content */}
+        <div style={{padding:'20px',maxWidth:1100,width:'100%',margin:'0 auto',flex:1}}>
+
           {/* Verdict */}
-          <div style={{ background:"rgba(0,229,160,0.05)",border:"1px solid rgba(0,229,160,0.15)",borderRadius:12,padding:"14px 18px",marginBottom:20,fontSize:14,color:C.soft,lineHeight:1.7 }}>
-            <strong style={{ color:C.green }}>🧠 Verdict: </strong>{analysis.verdict}
+          <div style={{background:'rgba(0,229,160,0.06)',border:'1px solid rgba(0,229,160,0.2)',borderRadius:14,padding:'14px 20px',marginBottom:20,fontSize:15,color:C.soft,lineHeight:1.7}}>
+            <strong style={{color:C.green}}>🧠 Verdict: </strong>{analysis.verdict}
           </div>
 
-          {/* Score + Metrics row */}
-          <div style={{ display:"grid",gridTemplateColumns:"minmax(140px,180px) 1fr",gap:16,marginBottom:16 }}>
-            <div style={{ ...S.card,textAlign:"center",padding:"20px 12px" }}>
-              <div style={{ fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10 }}>Score</div>
-              <div style={{ display:"flex",justifyContent:"center",marginBottom:14 }}><ScoreRing score={analysis.overallScore} size={100} stroke={10}/></div>
-              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:6 }}>
-                {[{l:"Close Rate",v:analysis.closingRate},{l:"Duration",v:analysis.callDuration}].map(x=>(
-                  <div key={x.l} style={{ background:"rgba(255,255,255,0.05)",borderRadius:8,padding:"8px 4px" }}>
-                    <div style={{ fontSize:9,color:C.muted,marginBottom:2 }}>{x.l}</div>
-                    <div style={{ fontSize:13,fontWeight:800,color:C.text }}>{x.v}</div>
+          {/* Top Row: Score + Skills */}
+          <div style={{display:'grid',gridTemplateColumns:'200px 1fr',gap:16,marginBottom:16}}>
+            {/* Score Card */}
+            <div style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:'20px 16px',textAlign:'center'}}>
+              <div style={{fontSize:10,fontWeight:700,color:C.muted,textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:12}}>Overall Score</div>
+              <div style={{display:'flex',justifyContent:'center',marginBottom:16}}><ScoreRing score={analysis.overallScore} size={110} stroke={11}/></div>
+              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                {[{l:'Close Rate',v:analysis.closingRate},{l:'Duration',v:analysis.callDuration}].map(x=>(
+                  <div key={x.l} style={{background:'rgba(255,255,255,0.05)',borderRadius:8,padding:'10px 6px'}}>
+                    <div style={{fontSize:9,color:C.muted,marginBottom:3,textTransform:'uppercase'}}>{x.l}</div>
+                    <div style={{fontSize:14,fontWeight:800,color:C.text}}>{x.v||'—'}</div>
                   </div>
                 ))}
               </div>
             </div>
-            <div style={{ ...S.card,padding:"16px 18px" }}>
-              <div style={{ fontSize:12,fontWeight:700,color:C.text,marginBottom:14 }}>Skill Breakdown</div>
+
+            {/* Skills */}
+            <div style={{background:'rgba(255,255,255,0.04)',border:'1px solid rgba(255,255,255,0.08)',borderRadius:14,padding:'20px'}}>
+              <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:16}}>Skill Breakdown</div>
               {(analysis.metrics||[]).map(m=>(
-                <div key={m.label} style={{ marginBottom:10 }}>
-                  <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
-                    <span style={{ fontSize:12,color:C.soft }}>{m.label}</span>
-                    <span style={{ fontSize:12,fontWeight:700,color:m.score>=70?C.green:m.score>=50?C.yellow:C.red }}>{m.score}</span>
+                <div key={m.label} style={{marginBottom:12}}>
+                  <div style={{display:'flex',justifyContent:'space-between',marginBottom:5}}>
+                    <span style={{fontSize:13,color:C.soft}}>{m.label}</span>
+                    <span style={{fontSize:13,fontWeight:800,color:m.score>=70?C.green:m.score>=50?C.yellow:'#FF6B6B'}}>{m.score}</span>
                   </div>
-                  <div style={{ height:6,background:"rgba(255,255,255,0.07)",borderRadius:99,overflow:"hidden" }}>
-                    <div style={{ height:"100%",width:`${m.score}%`,background:m.score>=70?C.green:m.score>=50?C.yellow:C.red,borderRadius:99,transition:"width 0.6s ease" }}/>
+                  <div style={{height:7,background:'rgba(255,255,255,0.07)',borderRadius:99,overflow:'hidden'}}>
+                    <div style={{height:'100%',width:m.score+'%',background:m.score>=70?C.green:m.score>=50?C.yellow:'#FF6B6B',borderRadius:99}}/>
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Strengths / Weaknesses / Actions */}
-          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14,marginBottom:16 }}>
+          {/* Strengths / Weaknesses / Actions - 3 columns */}
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:14,marginBottom:16}}>
             {[
-              { title:"💪 Strengths", items:analysis.strengths||[], color:C.green, bg:"rgba(0,229,160,0.05)" },
-              { title:"⚠️ Weaknesses", items:analysis.weaknesses||[], color:C.yellow, bg:"rgba(251,191,36,0.05)" },
-              { title:"🎯 Action Steps", items:analysis.improvements||[], color:"#60A5FA", bg:"rgba(96,165,250,0.05)" }
+              {title:'💪 Strengths',items:analysis.strengths||[],color:C.green,bg:'rgba(0,229,160,0.05)',border:'rgba(0,229,160,0.15)'},
+              {title:'⚠️ Weaknesses',items:analysis.weaknesses||[],color:'#FBBF24',bg:'rgba(251,191,36,0.05)',border:'rgba(251,191,36,0.15)'},
+              {title:'🎯 Action Steps',items:analysis.improvements||[],color:'#60A5FA',bg:'rgba(96,165,250,0.05)',border:'rgba(96,165,250,0.15)'}
             ].map(col=>(
-              <div key={col.title} style={{ background:col.bg,border:`1px solid ${col.color}22`,borderRadius:12,padding:"14px 16px" }}>
-                <div style={{ fontSize:13,fontWeight:700,color:col.color,marginBottom:10 }}>{col.title}</div>
+              <div key={col.title} style={{background:col.bg,border:'1px solid '+col.border,borderRadius:14,padding:'16px'}}>
+                <div style={{fontSize:13,fontWeight:700,color:col.color,marginBottom:12}}>{col.title}</div>
                 {col.items.map((s,i)=>(
-                  <div key={i} style={{ display:"flex",gap:8,marginBottom:8,fontSize:13,color:C.soft,lineHeight:1.5 }}>
-                    <span style={{ color:col.color,flexShrink:0,marginTop:2 }}>›</span><span>{s}</span>
+                  <div key={i} style={{display:'flex',gap:8,marginBottom:9,fontSize:13,color:C.soft,lineHeight:1.6}}>
+                    <span style={{color:col.color,flexShrink:0,fontWeight:700}}>›</span><span>{s}</span>
                   </div>
                 ))}
               </div>
             ))}
           </div>
 
-          {/* Language note */}
-          {analysis.languageNote&&<div style={{ background:"rgba(249,115,22,0.06)",border:"1px solid rgba(249,115,22,0.15)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#FB923C" }}>
-            <strong>🇳🇬 Language: </strong>{analysis.languageNote}
-          </div>}
-
-          {/* Critical Moment */}
-          {analysis.transcriptInsight&&<div style={{ background:"rgba(239,68,68,0.06)",border:"1px solid rgba(239,68,68,0.15)",borderRadius:12,padding:"14px 18px",marginBottom:14 }}>
-            <div style={{ fontSize:13,fontWeight:700,color:C.red,marginBottom:8 }}>📍 Critical Moment</div>
-            <div style={{ fontSize:13,color:C.soft,lineHeight:1.7,fontStyle:"italic" }}>{analysis.transcriptInsight}</div>
-          </div>}
-
-          {/* Script Suggestion */}
-          {analysis.scriptSuggestion&&<div style={{ background:"rgba(139,92,246,0.07)",border:"1px solid rgba(139,92,246,0.2)",borderRadius:12,padding:"14px 18px",marginBottom:16 }}>
-            <div style={{ fontSize:13,fontWeight:700,color:"#A78BFA",marginBottom:8 }}>💬 Memorize This Script</div>
-            <div style={{ fontSize:13,color:C.soft,lineHeight:1.8,fontFamily:"monospace",whiteSpace:"pre-wrap" }}>{analysis.scriptSuggestion}</div>
-          </div>}
+          {/* Language + Critical Moment + Script - 3 columns */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:14,marginBottom:16}}>
+            {analysis.languageNote&&<div style={{background:'rgba(249,115,22,0.06)',border:'1px solid rgba(249,115,22,0.15)',borderRadius:14,padding:'16px'}}>
+              <div style={{fontSize:12,fontWeight:700,color:'#FB923C',marginBottom:8}}>🇳🇬 Language</div>
+              <div style={{fontSize:13,color:C.soft,lineHeight:1.6}}>{analysis.languageNote}</div>
+            </div>}
+            {analysis.transcriptInsight&&<div style={{background:'rgba(239,68,68,0.06)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:14,padding:'16px'}}>
+              <div style={{fontSize:12,fontWeight:700,color:'#FF6B6B',marginBottom:8}}>📍 Critical Moment</div>
+              <div style={{fontSize:13,color:C.soft,lineHeight:1.6,fontStyle:'italic'}}>{analysis.transcriptInsight}</div>
+            </div>}
+            {analysis.scriptSuggestion&&<div style={{background:'rgba(139,92,246,0.07)',border:'1px solid rgba(139,92,246,0.2)',borderRadius:14,padding:'16px'}}>
+              <div style={{fontSize:12,fontWeight:700,color:'#A78BFA',marginBottom:8}}>💬 Memorize This Script</div>
+              <div style={{fontSize:12,color:C.soft,lineHeight:1.8,fontFamily:'monospace',whiteSpace:'pre-wrap'}}>{analysis.scriptSuggestion}</div>
+            </div>}
+          </div>
 
           {/* Learning Resources */}
-          {analysis.resources&&<div style={{ ...S.card,padding:"16px 18px" }}>
-            <div style={{ fontSize:13,fontWeight:700,color:C.text,marginBottom:4 }}>📚 AI-Recommended Learning Resources</div>
-            <div style={{ fontSize:11,color:C.muted,marginBottom:16 }}>Based on your weaknesses in this call:</div>
+          {analysis.resources&&<div>
+            <div style={{fontSize:15,fontWeight:700,color:C.text,marginBottom:16,fontFamily:'Syne,sans-serif'}}>📚 AI-Recommended Learning Resources</div>
 
-            {/* YOUTUBE - embedded player */}
-            {analysis.resources.youtube?.length>0&&<div style={{ marginBottom:20 }}>
-              <div style={{ fontSize:11,fontWeight:700,color:"#FF4444",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10 }}>▶️ YOUTUBE VIDEOS</div>
-              {analysis.resources.youtube.map((item,i)=>(
-                <div key={i} style={{ marginBottom:16,background:"rgba(255,255,255,0.03)",borderRadius:12,overflow:"hidden",border:"1px solid rgba(255,255,255,0.08)" }}>
-                  {item.videoId&&<div style={{ position:"relative",paddingBottom:"56.25%",height:0 }}>
-                    <iframe
-                      src={`https://www.youtube.com/embed/${item.videoId}`}
-                      title={item.title}
-                      style={{ position:"absolute",top:0,left:0,width:"100%",height:"100%",border:"none" }}
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                    />
-                  </div>}
-                  <div style={{ padding:"12px 14px" }}>
-                    <a href={`https://www.youtube.com/watch?v=${item.videoId}`} target="_blank" rel="noreferrer"
-                      style={{ fontSize:13,fontWeight:700,color:"#60A5FA",textDecoration:"none",display:"block",marginBottom:4 }}>
-                      {item.title} ↗
-                    </a>
-                    <div style={{ fontSize:12,color:C.muted,lineHeight:1.5 }}>{item.reason}</div>
+            {/* YouTube */}
+            {analysis.resources.youtube?.length>0&&<div style={{marginBottom:24}}>
+              <div style={{fontSize:11,fontWeight:700,color:'#FF4444',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:12,display:'flex',alignItems:'center',gap:6}}>
+                <span style={{background:'#FF4444',borderRadius:4,padding:'2px 6px',color:'#fff',fontSize:10}}>▶ YOUTUBE</span>
+              </div>
+              <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))',gap:16}}>
+                {analysis.resources.youtube.map((item,i)=>(
+                  <div key={i} style={{background:'rgba(255,255,255,0.04)',borderRadius:14,overflow:'hidden',border:'1px solid rgba(255,255,255,0.08)'}}>
+                    {ytId(item.videoId)
+                      ? <div style={{position:'relative',paddingBottom:'56.25%',height:0,background:'#000'}}>
+                          <iframe src={'https://www.youtube.com/embed/'+item.videoId+'?rel=0&modestbranding=1'} title={item.title}
+                            style={{position:'absolute',top:0,left:0,width:'100%',height:'100%',border:'none'}}
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen/>
+                        </div>
+                      : <a href={ytSearchUrl(item.title)} target="_blank" rel="noreferrer"
+                          style={{display:'flex',alignItems:'center',justifyContent:'center',height:160,background:'#1a0000',textDecoration:'none',flexDirection:'column',gap:8}}>
+                          <span style={{fontSize:36}}>▶️</span>
+                          <span style={{fontSize:12,color:'#FF4444',fontWeight:600}}>Watch on YouTube →</span>
+                        </a>
+                    }
+                    <div style={{padding:'12px 14px'}}>
+                      <a href={ytId(item.videoId)?'https://www.youtube.com/watch?v='+item.videoId:ytSearchUrl(item.title)}
+                        target="_blank" rel="noreferrer"
+                        style={{fontSize:13,fontWeight:700,color:'#60A5FA',textDecoration:'none',display:'block',marginBottom:4,lineHeight:1.4}}>
+                        {item.title} ↗
+                      </a>
+                      <div style={{fontSize:12,color:C.muted,lineHeight:1.5}}>{item.reason}</div>
+                    </div>
                   </div>
+                ))}
+              </div>
+            </div>}
+
+            {/* Books + Podcasts side by side */}
+            <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+              {/* Books */}
+              {analysis.resources.books?.length>0&&<div>
+                <div style={{fontSize:11,fontWeight:700,color:'#F97316',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:12,display:'flex',alignItems:'center',gap:6}}>
+                  <span style={{background:'rgba(249,115,22,0.2)',borderRadius:4,padding:'2px 8px',color:'#F97316',fontSize:10}}>📖 BOOKS</span>
                 </div>
-              ))}
-            </div>}
+                {analysis.resources.books.map((item,i)=>(
+                  <a key={i} href={item.link&&!item.link.includes('google.com/search')?item.link:amazonUrl(item.title)}
+                    target="_blank" rel="noreferrer"
+                    style={{display:'flex',gap:12,marginBottom:10,padding:'14px',background:'rgba(249,115,22,0.05)',borderRadius:12,border:'1px solid rgba(249,115,22,0.15)',textDecoration:'none',alignItems:'flex-start',cursor:'pointer'}}>
+                    <span style={{fontSize:32,flexShrink:0}}>📖</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:700,color:'#FB923C',marginBottom:4,lineHeight:1.4}}>{item.title}</div>
+                      <div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:8}}>{item.reason}</div>
+                      <div style={{fontSize:11,color:'#F97316',fontWeight:700,background:'rgba(249,115,22,0.1)',borderRadius:6,padding:'4px 10px',display:'inline-block'}}>🛒 Buy on Amazon →</div>
+                    </div>
+                  </a>
+                ))}
+              </div>}
 
-            {/* BOOKS */}
-            {analysis.resources.books?.length>0&&<div style={{ marginBottom:20 }}>
-              <div style={{ fontSize:11,fontWeight:700,color:"#F97316",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10 }}>📖 BOOKS</div>
-              {analysis.resources.books.map((item,i)=>(
-                <a key={i} href={item.link||`https://www.amazon.com/s?k=${encodeURIComponent(item.title)}`} target="_blank" rel="noreferrer"
-                  style={{ display:"flex",gap:12,marginBottom:10,padding:"12px 14px",background:"rgba(249,115,22,0.05)",borderRadius:10,border:"1px solid rgba(249,115,22,0.15)",textDecoration:"none",alignItems:"flex-start" }}>
-                  <span style={{ fontSize:28,flexShrink:0 }}>📖</span>
-                  <div>
-                    <div style={{ fontSize:13,fontWeight:700,color:"#FB923C",marginBottom:3 }}>{item.title}</div>
-                    <div style={{ fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:6 }}>{item.reason}</div>
-                    <div style={{ fontSize:11,color:"#F97316",fontWeight:600 }}>Buy / View on Amazon →</div>
-                  </div>
-                </a>
-              ))}
-            </div>}
-
-            {/* PODCASTS */}
-            {analysis.resources.podcasts?.length>0&&<div>
-              <div style={{ fontSize:11,fontWeight:700,color:"#1DB954",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10 }}>🎙️ PODCASTS</div>
-              {analysis.resources.podcasts.map((item,i)=>(
-                <a key={i} href={item.link||`https://open.spotify.com/search/${encodeURIComponent((item.show||"")+" "+(item.title||""))}`} target="_blank" rel="noreferrer"
-                  style={{ display:"flex",gap:12,marginBottom:10,padding:"12px 14px",background:"rgba(29,185,84,0.05)",borderRadius:10,border:"1px solid rgba(29,185,84,0.15)",textDecoration:"none",alignItems:"flex-start" }}>
-                  <span style={{ fontSize:28,flexShrink:0 }}>🎙️</span>
-                  <div>
-                    <div style={{ fontSize:13,fontWeight:700,color:"#1DB954",marginBottom:2 }}>{item.title}</div>
-                    {item.show&&<div style={{ fontSize:11,color:C.muted,marginBottom:4 }}>{item.show}</div>}
-                    <div style={{ fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:6 }}>{item.reason}</div>
-                    <div style={{ fontSize:11,color:"#1DB954",fontWeight:600 }}>Listen on Spotify →</div>
-                  </div>
-                </a>
-              ))}
-            </div>}
+              {/* Podcasts */}
+              {analysis.resources.podcasts?.length>0&&<div>
+                <div style={{fontSize:11,fontWeight:700,color:'#1DB954',textTransform:'uppercase',letterSpacing:'0.1em',marginBottom:12,display:'flex',alignItems:'center',gap:6}}>
+                  <span style={{background:'rgba(29,185,84,0.2)',borderRadius:4,padding:'2px 8px',color:'#1DB954',fontSize:10}}>🎙️ PODCASTS</span>
+                </div>
+                {analysis.resources.podcasts.map((item,i)=>(
+                  <a key={i} href={item.link&&!item.link.includes('google.com')?item.link:spotifyUrl(item.show,item.title)}
+                    target="_blank" rel="noreferrer"
+                    style={{display:'flex',gap:12,marginBottom:10,padding:'14px',background:'rgba(29,185,84,0.05)',borderRadius:12,border:'1px solid rgba(29,185,84,0.15)',textDecoration:'none',alignItems:'flex-start',cursor:'pointer'}}>
+                    <span style={{fontSize:32,flexShrink:0}}>🎙️</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:700,color:'#1DB954',marginBottom:2,lineHeight:1.4}}>{item.title}</div>
+                      {item.show&&<div style={{fontSize:11,color:C.muted,marginBottom:4}}>{item.show}</div>}
+                      <div style={{fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:8}}>{item.reason}</div>
+                      <div style={{fontSize:11,color:'#1DB954',fontWeight:700,background:'rgba(29,185,84,0.1)',borderRadius:6,padding:'4px 10px',display:'inline-block'}}>🎧 Listen on Spotify →</div>
+                    </div>
+                  </a>
+                ))}
+              </div>}
+            </div>
           </div>}
+
+          <div style={{height:40}}/>
         </div>
       </div>
     </div>
@@ -827,7 +876,7 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, o
           <button onClick={onLogout} style={{ background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 10px",color:C.muted,cursor:"pointer",fontSize:11 }}>Sign Out</button>
         </div>
       </nav>
-      <main style={{ maxWidth:1100,margin:"0 auto",padding:"28px 20px",position:"relative",zIndex:1 }}>
+      <main style={{ width:"100%",maxWidth:1400,margin:"0 auto",padding:"24px 32px",position:"relative",zIndex:1 }}>
         {tab==="dashboard"&&(
           <div>
             <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>Hey {user.name.split(" ")[0]} 👋</h1>
