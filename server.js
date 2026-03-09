@@ -229,5 +229,27 @@ IMPORTANT: For YouTube, provide REAL video IDs of videos that actually exist on 
   } catch(e) { res.status(500).json({ error: "Analysis failed: " + e.message }); }
 });
 
+
+app.post("/analyze-summary", async function(req, res) {
+  try {
+    const { prompt, closerName } = req.body;
+    if (!prompt) return res.status(400).json({ error: "No prompt." });
+    if (!ANTHROPIC_KEY) return res.status(500).json({ error: "Anthropic key missing." });
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 2000,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+    const data = await r.json();
+    if (!r.ok) return res.status(r.status).json({ error: data.error ? data.error.message : "Claude error." });
+    const text = data.content.map(function(b) { return b.text || ""; }).join("").replace(/```json|```/g, "").trim();
+    res.json({ analysis: JSON.parse(text) });
+  } catch(e) { res.status(500).json({ error: "Summary failed: " + e.message }); }
+});
+
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, function() { console.log("SalesCoach server on port " + PORT); });
