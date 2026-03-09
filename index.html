@@ -25,6 +25,10 @@
     @keyframes fadeUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
     @keyframes spin { to { transform:rotate(360deg); } }
     .fade-up { animation:fadeUp 0.4s ease both; }
+    @media (max-width:640px) {
+      select, input { font-size:16px !important; min-height:44px; }
+      button { min-height:44px; }
+    }
   </style>
 </head>
 <body>
@@ -328,131 +332,166 @@ function CommissionCard({ comm, label="Today's Commission" }) {
 // ─── REPORT MODAL ─────────────────────────────────────────────────────────────
 function ReportModal({ report, onClose }) {
   const { analysis, closerName, callType, callOutcome, product, date } = report;
+  const ytSearch = q => `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`;
+  const podSearch = q => `https://open.spotify.com/search/${encodeURIComponent(q)}`;
+  const resourceIcon = t => t==="books"?"📖":t==="youtube"?"▶️":"🎙️";
+  const resourceLink = (t, item) => t==="youtube" ? ytSearch(item.title) : t==="podcasts" ? podSearch(item.title) : `https://www.google.com/search?q=${encodeURIComponent(item.title+" book")}`;
+
   return (
-    <div style={{ position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,0.85)",backdropFilter:"blur(6px)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"24px 16px",overflowY:"auto",fontFamily:"'DM Sans','Segoe UI',sans-serif" }}>
-      <div style={{ width:"100%",maxWidth:900,background:"#0C1320",borderRadius:20,border:`1px solid ${C.border}`,overflow:"hidden" }}>
-        <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"18px 24px",borderBottom:`1px solid ${C.border}`,background:"rgba(0,229,160,0.04)" }}>
+    <div style={{ position:"fixed",inset:0,zIndex:1000,background:"rgba(0,0,0,0.92)",backdropFilter:"blur(8px)",display:"flex",alignItems:"flex-start",justifyContent:"center",padding:"16px",overflowY:"auto",fontFamily:"'DM Sans','Segoe UI',sans-serif" }}>
+      <div style={{ width:"100%",maxWidth:860,background:"#0C1320",borderRadius:20,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:32 }}>
+        {/* Header */}
+        <div style={{ display:"flex",alignItems:"center",justifyContent:"space-between",padding:"16px 20px",borderBottom:`1px solid ${C.border}`,background:"rgba(0,229,160,0.04)",flexWrap:"wrap",gap:10 }}>
           <div>
-            <div style={{ fontSize:16,fontWeight:800,color:C.text }}>{closerName} — AI Coach Report</div>
+            <div style={{ fontSize:17,fontWeight:800,color:C.text,fontFamily:"Syne,sans-serif" }}>{closerName} — AI Coach Report</div>
             <div style={{ fontSize:12,color:C.muted,marginTop:2 }}>{callType==="whatsapp"?"💬 WhatsApp":"📞 Phone"} · {product||"—"} · {fmtDate(date)}</div>
           </div>
-          <div style={{ display:"flex",gap:10,alignItems:"center" }}>
+          <div style={{ display:"flex",gap:8,alignItems:"center",flexWrap:"wrap" }}>
             <span style={S.pill(outcomeColor(callOutcome))}>{outcomeLabel(callOutcome)}</span>
-            <button onClick={onClose} style={{ background:"rgba(255,255,255,0.06)",border:"none",borderRadius:8,padding:"6px 14px",color:C.soft,cursor:"pointer",fontSize:13 }}>✕ Close</button>
+            <button onClick={onClose} style={{ background:"rgba(255,255,255,0.08)",border:"none",borderRadius:8,padding:"8px 16px",color:C.soft,cursor:"pointer",fontSize:13,fontWeight:600 }}>✕ Close</button>
           </div>
         </div>
-        <div style={{ padding:24 }}>
-          <div style={{ background:"rgba(0,229,160,0.05)",border:"1px solid rgba(0,229,160,0.12)",borderRadius:12,padding:"12px 16px",marginBottom:20,fontSize:13,color:C.soft,lineHeight:1.7 }}>
+
+        <div style={{ padding:"20px" }}>
+          {/* Verdict */}
+          <div style={{ background:"rgba(0,229,160,0.05)",border:"1px solid rgba(0,229,160,0.15)",borderRadius:12,padding:"14px 18px",marginBottom:20,fontSize:14,color:C.soft,lineHeight:1.7 }}>
             <strong style={{ color:C.green }}>🧠 Verdict: </strong>{analysis.verdict}
           </div>
-          <div style={{ display:"grid",gridTemplateColumns:"200px 1fr",gap:18 }}>
-            <div>
-              <div style={{ ...S.card,textAlign:"center",paddingTop:20 }}>
-                <div style={{ fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:10 }}>Score</div>
-                <div style={{ display:"flex",justifyContent:"center",marginBottom:14 }}><ScoreRing score={analysis.overallScore} size={96} stroke={9}/></div>
-                <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:7 }}>
-                  {[{l:"Close Rate",v:analysis.closingRate},{l:"Duration",v:analysis.callDuration}].map(x=>(
-                    <div key={x.l} style={{ background:"rgba(255,255,255,0.04)",borderRadius:8,padding:"8px 6px" }}>
-                      <div style={{ fontSize:9,color:C.muted,marginBottom:2 }}>{x.l}</div>
-                      <div style={{ fontSize:13,fontWeight:800,color:C.text }}>{x.v}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div style={S.card}>
-                <div style={{ fontSize:11,fontWeight:700,color:C.text,marginBottom:12 }}>Skill Breakdown</div>
-                {(analysis.metrics||[]).map(m=>(
-                  <div key={m.label} style={{ marginBottom:10 }}>
-                    <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
-                      <span style={{ fontSize:10,color:"#8A9BB5" }}>{m.label}</span>
-                      <span style={{ fontSize:10,fontWeight:800,color:scoreColor(m.score) }}>{m.score}</span>
-                    </div>
-                    <div style={{ height:4,background:"rgba(255,255,255,0.06)",borderRadius:999 }}>
-                      <div style={{ width:`${m.score}%`,height:"100%",background:scoreColor(m.score),borderRadius:999,transition:"width 1s ease" }}/>
-                    </div>
+
+          {/* Score + Metrics row */}
+          <div style={{ display:"grid",gridTemplateColumns:"minmax(140px,180px) 1fr",gap:16,marginBottom:16 }}>
+            <div style={{ ...S.card,textAlign:"center",padding:"20px 12px" }}>
+              <div style={{ fontSize:10,fontWeight:700,color:C.muted,textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10 }}>Score</div>
+              <div style={{ display:"flex",justifyContent:"center",marginBottom:14 }}><ScoreRing score={analysis.overallScore} size={100} stroke={10}/></div>
+              <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:6 }}>
+                {[{l:"Close Rate",v:analysis.closingRate},{l:"Duration",v:analysis.callDuration}].map(x=>(
+                  <div key={x.l} style={{ background:"rgba(255,255,255,0.05)",borderRadius:8,padding:"8px 4px" }}>
+                    <div style={{ fontSize:9,color:C.muted,marginBottom:2 }}>{x.l}</div>
+                    <div style={{ fontSize:13,fontWeight:800,color:C.text }}>{x.v}</div>
                   </div>
                 ))}
-              </div>
-              <div style={{ ...S.card,background:"rgba(0,229,160,0.03)",border:"1px solid rgba(0,229,160,0.1)" }}>
-                <div style={{ fontSize:10,fontWeight:700,color:C.green,marginBottom:5 }}>🇳🇬 Language</div>
-                <div style={{ fontSize:11,color:C.muted,lineHeight:1.65 }}>{analysis.languageNote}</div>
               </div>
             </div>
-            <div>
-              <div style={{ ...S.g3,marginBottom:14 }}>
-                {[{icon:"💪",title:"Strengths",items:analysis.strengths,color:C.green},{icon:"⚠️",title:"Weaknesses",items:analysis.weaknesses,color:C.red},{icon:"🎯",title:"Action Steps",items:analysis.improvements,color:C.yellow}].map(sec=>(
-                  <div key={sec.title} style={{ ...S.card,position:"relative",overflow:"hidden",paddingTop:18 }}>
-                    <div style={S.accentTop(sec.color)}/>
-                    <div style={{ fontSize:11,fontWeight:800,color:sec.color,marginBottom:10 }}>{sec.icon} {sec.title}</div>
-                    {(sec.items||[]).map((item,i)=>(
-                      <div key={i} style={{ display:"flex",gap:6,marginBottom:9 }}>
-                        <div style={{ width:2.5,minWidth:2.5,borderRadius:999,background:sec.color,marginTop:4 }}/>
-                        <div style={{ fontSize:11,color:"#A8B8CC",lineHeight:1.65 }}>{item}</div>
-                      </div>
-                    ))}
+            <div style={{ ...S.card,padding:"16px 18px" }}>
+              <div style={{ fontSize:12,fontWeight:700,color:C.text,marginBottom:14 }}>Skill Breakdown</div>
+              {(analysis.metrics||[]).map(m=>(
+                <div key={m.label} style={{ marginBottom:10 }}>
+                  <div style={{ display:"flex",justifyContent:"space-between",marginBottom:4 }}>
+                    <span style={{ fontSize:12,color:C.soft }}>{m.label}</span>
+                    <span style={{ fontSize:12,fontWeight:700,color:m.score>=70?C.green:m.score>=50?C.yellow:C.red }}>{m.score}</span>
                   </div>
-                ))}
-              </div>
-              <div style={{ ...S.card,background:"rgba(255,182,39,0.04)",border:"1px solid rgba(255,182,39,0.14)",marginBottom:12 }}>
-                <div style={{ fontSize:11,fontWeight:800,color:C.yellow,marginBottom:8 }}>📝 Critical Moment</div>
-                <div style={{ fontSize:12,color:"#C8B88A",lineHeight:1.8,background:"rgba(0,0,0,0.25)",borderRadius:8,padding:"11px 13px",fontStyle:"italic" }}>{analysis.transcriptInsight}</div>
-              </div>
-              <div style={{ ...S.card,background:"rgba(124,58,237,0.05)",border:"1px solid rgba(124,58,237,0.18)",marginBottom:12 }}>
-                <div style={{ fontSize:11,fontWeight:800,color:C.purple,marginBottom:8 }}>💬 Memorize This Script</div>
-                <div style={{ fontSize:12,color:"#C4B5FD",lineHeight:1.8,fontFamily:"'Courier New',monospace",background:"rgba(0,0,0,0.3)",borderRadius:8,padding:"11px 13px",whiteSpace:"pre-wrap" }}>{analysis.scriptSuggestion}</div>
-              </div>
-              {analysis.resources&&(
-                <div style={{ ...S.card,background:"rgba(96,165,250,0.05)",border:"1px solid rgba(96,165,250,0.18)" }}>
-                  <div style={{ fontSize:11,fontWeight:800,color:C.blue,marginBottom:10 }}>📚 AI-Recommended Learning Resources</div>
-                  <div style={{ fontSize:11,color:C.muted,marginBottom:10,fontStyle:"italic" }}>Based on your weaknesses in this call:</div>
-                  {["books","youtube","podcasts"].map(type=>(
-                    analysis.resources[type]?.length>0&&(
-                      <div key={type} style={{ marginBottom:10 }}>
-                        <div style={{ fontSize:10,fontWeight:700,color:C.soft,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.07em" }}>{type==="books"?"📖 Books":type==="youtube"?"▶️ YouTube":"🎙️ Podcasts"}</div>
-                        {analysis.resources[type].map((x,i)=>(
-                          <div key={i} style={{ display:"flex",gap:8,marginBottom:7 }}>
-                            <span style={{ color:C.blue,fontSize:12 }}>▸</span>
-                            <div><div style={{ fontSize:12,fontWeight:700,color:C.text }}>{x.title}</div><div style={{ fontSize:11,color:C.muted }}>{x.reason}</div></div>
-                          </div>
-                        ))}
-                      </div>
-                    )
-                  ))}
+                  <div style={{ height:6,background:"rgba(255,255,255,0.07)",borderRadius:99,overflow:"hidden" }}>
+                    <div style={{ height:"100%",width:`${m.score}%`,background:m.score>=70?C.green:m.score>=50?C.yellow:C.red,borderRadius:99,transition:"width 0.6s ease" }}/>
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
           </div>
+
+          {/* Strengths / Weaknesses / Actions */}
+          <div style={{ display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:14,marginBottom:16 }}>
+            {[
+              { title:"💪 Strengths", items:analysis.strengths||[], color:C.green, bg:"rgba(0,229,160,0.05)" },
+              { title:"⚠️ Weaknesses", items:analysis.weaknesses||[], color:C.yellow, bg:"rgba(251,191,36,0.05)" },
+              { title:"🎯 Action Steps", items:analysis.improvements||[], color:"#60A5FA", bg:"rgba(96,165,250,0.05)" }
+            ].map(col=>(
+              <div key={col.title} style={{ background:col.bg,border:`1px solid ${col.color}22`,borderRadius:12,padding:"14px 16px" }}>
+                <div style={{ fontSize:13,fontWeight:700,color:col.color,marginBottom:10 }}>{col.title}</div>
+                {col.items.map((s,i)=>(
+                  <div key={i} style={{ display:"flex",gap:8,marginBottom:8,fontSize:13,color:C.soft,lineHeight:1.5 }}>
+                    <span style={{ color:col.color,flexShrink:0,marginTop:2 }}>›</span><span>{s}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+
+          {/* Language note */}
+          {analysis.languageNote&&<div style={{ background:"rgba(249,115,22,0.06)",border:"1px solid rgba(249,115,22,0.15)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:12,color:"#FB923C" }}>
+            <strong>🇳🇬 Language: </strong>{analysis.languageNote}
+          </div>}
+
+          {/* Critical Moment */}
+          {analysis.transcriptInsight&&<div style={{ background:"rgba(239,68,68,0.06)",border:"1px solid rgba(239,68,68,0.15)",borderRadius:12,padding:"14px 18px",marginBottom:14 }}>
+            <div style={{ fontSize:13,fontWeight:700,color:C.red,marginBottom:8 }}>📍 Critical Moment</div>
+            <div style={{ fontSize:13,color:C.soft,lineHeight:1.7,fontStyle:"italic" }}>{analysis.transcriptInsight}</div>
+          </div>}
+
+          {/* Script Suggestion */}
+          {analysis.scriptSuggestion&&<div style={{ background:"rgba(139,92,246,0.07)",border:"1px solid rgba(139,92,246,0.2)",borderRadius:12,padding:"14px 18px",marginBottom:16 }}>
+            <div style={{ fontSize:13,fontWeight:700,color:"#A78BFA",marginBottom:8 }}>💬 Memorize This Script</div>
+            <div style={{ fontSize:13,color:C.soft,lineHeight:1.8,fontFamily:"monospace",whiteSpace:"pre-wrap" }}>{analysis.scriptSuggestion}</div>
+          </div>}
+
+          {/* Learning Resources */}
+          {analysis.resources&&<div style={{ ...S.card,padding:"16px 18px" }}>
+            <div style={{ fontSize:13,fontWeight:700,color:C.text,marginBottom:4 }}>📚 AI-Recommended Learning Resources</div>
+            <div style={{ fontSize:11,color:C.muted,marginBottom:16 }}>Based on your weaknesses in this call:</div>
+
+            {/* YOUTUBE - embedded player */}
+            {analysis.resources.youtube?.length>0&&<div style={{ marginBottom:20 }}>
+              <div style={{ fontSize:11,fontWeight:700,color:"#FF4444",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10 }}>▶️ YOUTUBE VIDEOS</div>
+              {analysis.resources.youtube.map((item,i)=>(
+                <div key={i} style={{ marginBottom:16,background:"rgba(255,255,255,0.03)",borderRadius:12,overflow:"hidden",border:"1px solid rgba(255,255,255,0.08)" }}>
+                  {item.videoId&&<div style={{ position:"relative",paddingBottom:"56.25%",height:0 }}>
+                    <iframe
+                      src={`https://www.youtube.com/embed/${item.videoId}`}
+                      title={item.title}
+                      style={{ position:"absolute",top:0,left:0,width:"100%",height:"100%",border:"none" }}
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                      allowFullScreen
+                    />
+                  </div>}
+                  <div style={{ padding:"12px 14px" }}>
+                    <a href={`https://www.youtube.com/watch?v=${item.videoId}`} target="_blank" rel="noreferrer"
+                      style={{ fontSize:13,fontWeight:700,color:"#60A5FA",textDecoration:"none",display:"block",marginBottom:4 }}>
+                      {item.title} ↗
+                    </a>
+                    <div style={{ fontSize:12,color:C.muted,lineHeight:1.5 }}>{item.reason}</div>
+                  </div>
+                </div>
+              ))}
+            </div>}
+
+            {/* BOOKS */}
+            {analysis.resources.books?.length>0&&<div style={{ marginBottom:20 }}>
+              <div style={{ fontSize:11,fontWeight:700,color:"#F97316",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10 }}>📖 BOOKS</div>
+              {analysis.resources.books.map((item,i)=>(
+                <a key={i} href={item.link||`https://www.amazon.com/s?k=${encodeURIComponent(item.title)}`} target="_blank" rel="noreferrer"
+                  style={{ display:"flex",gap:12,marginBottom:10,padding:"12px 14px",background:"rgba(249,115,22,0.05)",borderRadius:10,border:"1px solid rgba(249,115,22,0.15)",textDecoration:"none",alignItems:"flex-start" }}>
+                  <span style={{ fontSize:28,flexShrink:0 }}>📖</span>
+                  <div>
+                    <div style={{ fontSize:13,fontWeight:700,color:"#FB923C",marginBottom:3 }}>{item.title}</div>
+                    <div style={{ fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:6 }}>{item.reason}</div>
+                    <div style={{ fontSize:11,color:"#F97316",fontWeight:600 }}>Buy / View on Amazon →</div>
+                  </div>
+                </a>
+              ))}
+            </div>}
+
+            {/* PODCASTS */}
+            {analysis.resources.podcasts?.length>0&&<div>
+              <div style={{ fontSize:11,fontWeight:700,color:"#1DB954",textTransform:"uppercase",letterSpacing:"0.08em",marginBottom:10 }}>🎙️ PODCASTS</div>
+              {analysis.resources.podcasts.map((item,i)=>(
+                <a key={i} href={item.link||`https://open.spotify.com/search/${encodeURIComponent((item.show||"")+" "+(item.title||""))}`} target="_blank" rel="noreferrer"
+                  style={{ display:"flex",gap:12,marginBottom:10,padding:"12px 14px",background:"rgba(29,185,84,0.05)",borderRadius:10,border:"1px solid rgba(29,185,84,0.15)",textDecoration:"none",alignItems:"flex-start" }}>
+                  <span style={{ fontSize:28,flexShrink:0 }}>🎙️</span>
+                  <div>
+                    <div style={{ fontSize:13,fontWeight:700,color:"#1DB954",marginBottom:2 }}>{item.title}</div>
+                    {item.show&&<div style={{ fontSize:11,color:C.muted,marginBottom:4 }}>{item.show}</div>}
+                    <div style={{ fontSize:12,color:C.muted,lineHeight:1.5,marginBottom:6 }}>{item.reason}</div>
+                    <div style={{ fontSize:11,color:"#1DB954",fontWeight:600 }}>Listen on Spotify →</div>
+                  </div>
+                </a>
+              ))}
+            </div>}
+          </div>}
         </div>
       </div>
     </div>
   );
 }
 
-// ─── BACKEND SERVER ─────────────────────────────────────────────────────────────────────────────
-const SERVER_URL = "https://salescoach-server.onrender.com";
-
-async function transcribeAudio(audioFile) {
-  const formData = new FormData();
-  formData.append("audio", audioFile);
-  const res = await fetch(`${SERVER_URL}/transcribe`, { method:"POST", body:formData });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error || `Transcription failed (${res.status})`);
-  return data.transcript;
-}
-
-async function analyzeWithClaude({ transcript, closerName, callType, callOutcome, product, teamType }) {
-  const res = await fetch(`${SERVER_URL}/analyze`, {
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({ transcript, closerName, callType, callOutcome, product, teamType }),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data?.error || `Analysis failed (${res.status})`);
-  return data.analysis;
-}
-
-// ─── DAILY LOG FORMS ──────────────────────────────────────────────────────────
-
-// Standard sales closer log
 function SalesDailyLogForm({ user, onSaved, existingLog }) {
   const [form,setForm]=useState({ date:existingLog?.date||todayStr(), assigned:existingLog?.assigned||"", confirmed:existingLog?.confirmed||"", delivered:existingLog?.delivered||"", upsells:existingLog?.upsells||"", repeats:existingLog?.repeats||"", referrals:existingLog?.referrals||"", notes:existingLog?.notes||"" });
   const [saving,setSaving]=useState(false);
@@ -632,6 +671,7 @@ function NoAnswerForm({ user, onSaved }) {
 function CallUploadSection({ user, teams, refresh }) {
   const [callType,setCallType]=useState("phone");
   const [callOutcome,setCallOutcome]=useState("unknown");
+  const [success,setSuccess]=useState(false);
   const [product,setProduct]=useState("");
   const [audioFile,setAudioFile]=useState(null);
   const [loading,setLoading]=useState(false);
@@ -667,6 +707,7 @@ function CallUploadSection({ user, teams, refresh }) {
       setLoading(false); setProgress(0); setStatus("");
       setAudioFile(null); setProduct(""); setCallOutcome("unknown");
       if (fileRef.current) fileRef.current.value = "";
+      setSuccess(true); setTimeout(()=>setSuccess(false), 5000);
     } catch(e) {
       setLoading(false); setProgress(0); setStatus("");
       setError(e.message || "Something went wrong. Try again.");
@@ -695,6 +736,10 @@ function CallUploadSection({ user, teams, refresh }) {
 
   return (
     <div style={S.card}>
+      {success&&<div style={{ background:"rgba(0,229,160,0.1)",border:"1px solid rgba(0,229,160,0.25)",borderRadius:10,padding:"12px 16px",marginBottom:14,fontSize:13,color:"#00E5A0",lineHeight:1.6,display:"flex",alignItems:"center",gap:10 }}>
+        <span style={{fontSize:20}}>🎉</span>
+        <div><strong>Call analyzed successfully!</strong><br/><span style={{fontSize:12,opacity:0.8}}>Your report has been saved. Check History to view it.</span></div>
+      </div>}
       {error&&<div style={{ background:"rgba(255,107,107,0.08)",border:"1px solid rgba(255,107,107,0.2)",borderRadius:10,padding:"10px 13px",marginBottom:14,fontSize:12,color:"#FF8080",lineHeight:1.6 }}>⚠️ {error}</div>}
       <div style={{ ...S.g2,marginBottom:14 }}>
         <div><label style={S.label}>Call Type</label>
