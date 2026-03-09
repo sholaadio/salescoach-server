@@ -24,6 +24,11 @@
     @keyframes fadeUp { from{opacity:0;transform:translateY(14px)} to{opacity:1;transform:translateY(0)} }
     @keyframes spin { to{transform:rotate(360deg)} }
     .fade-up { animation:fadeUp 0.35s ease both; }
+    @media print {
+      nav, .no-print { display:none !important; }
+      body { background:white !important; }
+      #report-print-area { background:white !important; color:#000 !important; position:fixed; top:0; left:0; width:100%; }
+    }
     @media (max-width:768px) {
       nav { padding:0 8px !important; overflow-x:auto; -webkit-overflow-scrolling:touch; }
       nav::-webkit-scrollbar { display:none; }
@@ -219,7 +224,27 @@ function getWeeklyRate(logs, closerId) {
 }
 
 // ─── DESIGN ───────────────────────────────────────────────────────────────────
-const C = { bg:"#060A12", surface:"rgba(255,255,255,0.03)", border:"rgba(255,255,255,0.07)", green:"#F97316", yellow:"#FFB627", red:"#FF6B6B", purple:"#A78BFA", blue:"#60A5FA", pink:"#F472B6", text:"#E8EDF5", muted:"#5A6A80", soft:"#B8C5D6" };
+// ─── THEME SYSTEM ──────────────────────────────────────────────
+const DARK_THEME = { bg:"#07080F", card:"rgba(255,255,255,0.04)", border:"rgba(255,255,255,0.07)", text:"#F1F5FF", soft:"#C8D3E8", muted:"#6A7A90", green:"#00E5A0", yellow:"#FBBF24", red:"#FF6B6B", orange:"#F97316", navBg:"rgba(6,10,18,0.97)", surface:"rgba(255,255,255,0.03)", blue:"#60A5FA", purple:"#A78BFA", pink:"#F472B6" };
+const LIGHT_THEME = { bg:"#F0F4FF", card:"rgba(255,255,255,0.9)", border:"rgba(0,0,0,0.08)", text:"#0A0E1A", soft:"#1E293B", muted:"#64748B", green:"#059669", yellow:"#D97706", red:"#DC2626", orange:"#EA580C", navBg:"rgba(255,255,255,0.97)", surface:"rgba(0,0,0,0.02)", blue:"#2563EB", purple:"#7C3AED", pink:"#DB2777" };
+function getTheme() { try { return localStorage.getItem("sc_theme")==="light"?LIGHT_THEME:DARK_THEME; } catch(e){return DARK_THEME;} }
+const C = getTheme();
+
+// ─── PRINT STYLES ─────────────────────────────────────────────
+if (typeof document !== 'undefined') {
+  const printStyle = document.createElement('style');
+  printStyle.textContent = `
+    @media print {
+      nav, .no-print, button:not(.print-show) { display: none !important; }
+      body { background: white !important; color: black !important; }
+      #report-print-area { background: white !important; color: black !important; min-height: auto !important; }
+      #report-print-area * { color: black !important; border-color: #ccc !important; background: white !important; }
+    }
+  `;
+  document.head.appendChild(printStyle);
+}
+
+
 const accent = role => ({ ceo:"#FFB627", gm:"#A78BFA", head_sales:"#F97316", head_creative:"#60A5FA", hr:"#F472B6", teamlead:"#F97316", closer:"#F97316" })[role]||C.green;
 const S = {
   card:   { background:C.surface, border:`1px solid ${C.border}`, borderRadius:20, padding:26, marginBottom:20 },
@@ -343,7 +368,7 @@ function ReportModal({ report, onClose }) {
 
   return (
     <div onClick={e=>{if(e.target===e.currentTarget)onClose();}} style={{position:'fixed',inset:0,zIndex:1000,background:'rgba(0,0,0,0.93)',backdropFilter:'blur(8px)',overflowY:'auto',fontFamily:"'DM Sans','Segoe UI',sans-serif",padding:'0'}}>
-      <div style={{maxWidth:'100%',minHeight:'100vh',background:'#0A0E1A',display:'flex',flexDirection:'column'}}>
+      <div id='report-print-area' style={{maxWidth:'100%',minHeight:'100vh',background:'#0A0E1A',display:'flex',flexDirection:'column'}}>
 
         {/* Sticky Header */}
         <div style={{position:'sticky',top:0,zIndex:10,background:'#0A0E1A',borderBottom:'1px solid rgba(249,115,22,0.2)',padding:'14px 20px',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:10}}>
@@ -354,6 +379,7 @@ function ReportModal({ report, onClose }) {
           <div style={{display:'flex',gap:8,alignItems:'center',flexWrap:'wrap'}}>
             <span style={S.pill(outcomeColor(callOutcome))}>{outcomeLabel(callOutcome)}</span>
             <WhatsAppShareBtn report={report} user={{name:closerName}}/>
+            <button onClick={()=>{document.getElementById('report-print-area').style.position='relative';window.print();}} style={{background:'rgba(249,115,22,0.12)',border:'1px solid rgba(249,115,22,0.3)',borderRadius:8,padding:'8px 14px',color:'#F97316',cursor:'pointer',fontSize:13,fontWeight:700}}>📄 PDF</button>
             <button onClick={onClose} style={{background:'rgba(255,255,255,0.1)',border:'none',borderRadius:8,padding:'8px 18px',color:C.text,cursor:'pointer',fontSize:13,fontWeight:600}}>✕ Close</button>
           </div>
         </div>
@@ -818,29 +844,59 @@ function CallUploadSection({ user, teams, refresh }) {
 }
 // ─── CLOSER PORTAL ────────────────────────────────────────────────────────────
 
+
+// ─── THEME TOGGLE ─────────────────────────────────────────────
+function ThemeToggle() {
+  const [isDark,setIsDark]=useState(()=>{ try{return localStorage.getItem("sc_theme")!=="light";}catch(e){return true;} });
+  const toggle=()=>{
+    const next=isDark?"light":"dark";
+    try{localStorage.setItem("sc_theme",next);}catch(e){}
+    setIsDark(!isDark);
+    window.location.reload(); // reload to apply new theme
+  };
+  return (
+    <button onClick={toggle} title={isDark?"Switch to Light Mode":"Switch to Dark Mode"}
+      style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:8,padding:"4px 10px",color:C.muted,cursor:"pointer",fontSize:14,lineHeight:1}}>
+      {isDark?"☀️":"🌙"}
+    </button>
+  );
+}
+
 // ─── PWA INSTALL PROMPT ───────────────────────────────────────
 function PWAInstallBanner() {
   const [deferredPrompt,setDeferredPrompt]=useState(null);
   const [show,setShow]=useState(false);
+  const [isIOS,setIsIOS]=useState(false);
+
   useEffect(()=>{
-    const handler=e=>{e.preventDefault();setDeferredPrompt(e);setShow(true);};
-    window.addEventListener('beforeinstallprompt',handler);
-    return()=>window.removeEventListener('beforeinstallprompt',handler);
+    if(window.matchMedia("(display-mode: standalone)").matches) return;
+    try { if(localStorage.getItem("pwa_dismissed")==="1") return; } catch(e){}
+    const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent) && !window.navigator.standalone;
+    if(ios) { setIsIOS(true); setTimeout(()=>setShow(true), 4000); return; }
+    const handler=e=>{e.preventDefault();setDeferredPrompt(e);setTimeout(()=>setShow(true),2000);};
+    window.addEventListener("beforeinstallprompt",handler);
+    return()=>window.removeEventListener("beforeinstallprompt",handler);
   },[]);
+
+  const dismiss=()=>{ try{localStorage.setItem("pwa_dismissed","1");}catch(e){} setShow(false); };
+  const install=async()=>{
+    if(deferredPrompt){ deferredPrompt.prompt(); const r=await deferredPrompt.userChoice; setDeferredPrompt(null); }
+    setShow(false);
+  };
+
   if(!show) return null;
   return (
-    <div style={{position:'fixed',bottom:16,left:'50%',transform:'translateX(-50%)',zIndex:9999,background:'linear-gradient(135deg,#1a1f2e,#0d1117)',border:'1px solid rgba(249,115,22,0.4)',borderRadius:16,padding:'14px 20px',display:'flex',alignItems:'center',gap:14,boxShadow:'0 8px 32px rgba(0,0,0,0.6)',maxWidth:360,width:'calc(100% - 32px)'}}>
-      <img src={LOGO_SRC} style={{width:36,height:36,borderRadius:8,flexShrink:0}}/>
+    <div style={{position:"fixed",bottom:16,left:"50%",transform:"translateX(-50%)",zIndex:9999,background:"linear-gradient(135deg,#1a1f2e,#0d1117)",border:"1px solid rgba(249,115,22,0.4)",borderRadius:16,padding:"14px 20px",display:"flex",alignItems:"center",gap:14,boxShadow:"0 8px 32px rgba(0,0,0,0.6)",maxWidth:380,width:"calc(100% - 32px)"}}>
+      <div style={{fontSize:28,flexShrink:0}}>📲</div>
       <div style={{flex:1}}>
-        <div style={{fontSize:13,fontWeight:700,color:'#F1F5FF'}}>Install SalesCoach</div>
-        <div style={{fontSize:11,color:'#6A7A90',marginTop:2}}>Add to home screen for quick access</div>
+        <div style={{fontSize:13,fontWeight:800,color:"#F1F5FF",marginBottom:2}}>Add to Home Screen</div>
+        <div style={{fontSize:11,color:"#6A7A90"}}>{isIOS?"Tap Share → Add to Home Screen":"Install the SalesCoach app for quick access"}</div>
       </div>
-      <button onClick={async()=>{if(deferredPrompt){deferredPrompt.prompt();const r=await deferredPrompt.userChoice;setShow(false);}}} style={{background:'#F97316',border:'none',borderRadius:10,padding:'8px 14px',color:'#fff',fontWeight:700,fontSize:12,cursor:'pointer',flexShrink:0}}>Install</button>
-      <button onClick={()=>setShow(false)} style={{background:'transparent',border:'none',color:'#6A7A90',cursor:'pointer',fontSize:16,flexShrink:0}}>✕</button>
+      {!isIOS&&<button onClick={install} style={{background:"#F97316",border:"none",borderRadius:10,padding:"8px 14px",color:"#fff",cursor:"pointer",fontSize:12,fontWeight:800,flexShrink:0}}>Install</button>}
+      <button onClick={dismiss} style={{background:"transparent",border:"none",color:"#6A7A90",cursor:"pointer",fontSize:18,padding:"0 4px",flexShrink:0}}>×</button>
     </div>
   );
 }
-
 // ─── DARK/LIGHT MODE ─────────────────────────────────────────
 const THEMES = {
   dark: { bg:'#07080F', card:'rgba(255,255,255,0.04)', border:'rgba(255,255,255,0.07)', text:'#F1F5FF', soft:'#C8D3E8', muted:'#6A7A90', green:'#00E5A0', yellow:'#FBBF24', red:'#FF6B6B', orange:'#F97316', navBg:'rgba(6,10,18,0.97)' },
@@ -1055,6 +1111,9 @@ ${summary.tomorrowFocus}
             <button onClick={()=>shareToWhatsApp(summaryText)} style={{background:'#25D366',border:'none',borderRadius:10,padding:'8px 16px',color:'#fff',fontWeight:700,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
               <span>📲</span> Share to WhatsApp
             </button>
+            <button onClick={()=>{document.title=user.name+' Summary Report';window.print();}} style={{background:'rgba(249,115,22,0.15)',border:'1px solid rgba(249,115,22,0.3)',borderRadius:10,padding:'8px 16px',color:'#F97316',fontWeight:700,fontSize:13,cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
+              <span>📄</span> Export PDF
+            </button>
           </div>
         </div>
 
@@ -1172,10 +1231,10 @@ function OnboardingModal({ user, onDone }) {
           {steps.map((_,i)=><div key={i} style={{width:8,height:8,borderRadius:99,background:i<=step?C.orange:'rgba(255,255,255,0.1)'}}/>)}
         </div>
         <div style={{display:'flex',gap:10}}>
-          {step>0&&<button onClick={()=>setStep(s=>s-1)} style={{flex:1,background:'rgba(255,255,255,0.07)',border:'none',borderRadius:10,padding:'12px',color:C.soft,cursor:'pointer',fontSize:14,fontWeight:600}}>← Back</button>}
+          {step>0&&<button onClick={()=>setStep(s=>s-1)} style={{flex:1,background:'rgba(255,255,255,0.1)',border:'1px solid rgba(255,255,255,0.15)',borderRadius:10,padding:'14px',color:'#F1F5FF',cursor:'pointer',fontSize:15,fontWeight:700}}>← Back</button>}
           {step<steps.length-1
-            ?<button onClick={()=>setStep(s=>s+1)} style={{flex:1,background:C.orange,border:'none',borderRadius:10,padding:'12px',color:'#fff',cursor:'pointer',fontSize:14,fontWeight:700}}>Next →</button>
-            :<button onClick={onDone} style={{flex:1,background:'linear-gradient(135deg,#00E5A0,#00B37A)',border:'none',borderRadius:10,padding:'12px',color:'#fff',cursor:'pointer',fontSize:14,fontWeight:700}}>🚀 Let's Go!</button>
+            ?<button onClick={()=>setStep(s=>s+1)} style={{flex:1,background:'#F97316',border:'none',borderRadius:10,padding:'14px',color:'#fff',cursor:'pointer',fontSize:15,fontWeight:800,boxShadow:'0 4px 16px rgba(249,115,22,0.4)'}}>Next →</button>
+            :<button onClick={onDone} style={{flex:1,background:'linear-gradient(135deg,#00E5A0,#00B37A)',border:'none',borderRadius:10,padding:'14px',color:'#fff',cursor:'pointer',fontSize:15,fontWeight:800,boxShadow:'0 4px 16px rgba(0,229,160,0.4)'}}>🚀 Let's Go!</button>
           }
         </div>
       </div>
@@ -1219,6 +1278,199 @@ function ResetPinModal({ targetUser, onClose, saveUsersData, refresh, flash }) {
   );
 }
 
+
+
+
+// ─── PDF / SNAPSHOT EXPORT ───────────────────────────────────
+function exportToPDF(title) {
+  const printCSS = `
+    @media print {
+      body * { visibility: hidden !important; }
+      #print-area, #print-area * { visibility: visible !important; }
+      #print-area { position: fixed; left: 0; top: 0; width: 100%; background: white; color: #000; padding: 24px; }
+      nav, button, .no-print { display: none !important; }
+    }
+  `;
+  let style = document.getElementById('print-style');
+  if (!style) { style = document.createElement('style'); style.id='print-style'; document.head.appendChild(style); }
+  style.textContent = printCSS;
+  const area = document.getElementById('print-area');
+  if (area) {
+    document.title = title || 'SalesCoach Report';
+    window.print();
+  }
+}
+
+function PrintWrapper({ children, title }) {
+  return (
+    <div id="print-area">
+      <div className="no-print" style={{display:"flex",justifyContent:"flex-end",marginBottom:12,gap:8}}>
+        <button onClick={()=>exportToPDF(title)}
+          style={{background:"rgba(249,115,22,0.15)",border:"1px solid rgba(249,115,22,0.3)",borderRadius:8,padding:"8px 16px",color:"#F97316",cursor:"pointer",fontSize:13,fontWeight:700,display:"flex",alignItems:"center",gap:6}}>
+          📄 Export PDF
+        </button>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ─── TEAM LEADERBOARD ────────────────────────────────────────
+function TeamLeaderboard({ users, teams, allReports, allLogs, period, myTeamId }) {
+  const closers = Object.values(users).filter(u=>["closer","teamlead"].includes(u.role));
+  const stats = closers.map(c=>{
+    const reports = allReports.filter(r=>r.closerId===c.id);
+    const logs = filterLogsByPeriod(allLogs.filter(l=>l.closerId===c.id&&l.status==="approved"), period);
+    const assigned = logs.reduce((s,l)=>s+(+(l.callsThrough||l.assigned)||0),0);
+    const delivered = logs.reduce((s,l)=>s+(+l.delivered||0),0);
+    const rate = assigned>0?Math.round((delivered/assigned)*100):0;
+    const avgScore = reports.length>0?Math.round(reports.reduce((s,r)=>s+(r.analysis?.overallScore||0),0)/reports.length):0;
+    const team = teams[c.teamId];
+    return { ...c, rate, avgScore, delivered, assigned, team, reports:reports.length };
+  }).filter(c=>c.assigned>0||c.reports>0).sort((a,b)=>b.rate-a.rate||b.avgScore-a.avgScore);
+
+  // Group by team for team leaderboard
+  const teamStats = Object.values(teams).map(t=>{
+    const members = closers.filter(c=>c.teamId===t.id);
+    const tLogs = filterLogsByPeriod(allLogs.filter(l=>l.teamId===t.id&&l.status==="approved"), period);
+    const tAssigned = tLogs.reduce((s,l)=>s+(+(l.callsThrough||l.assigned)||0),0);
+    const tDelivered = tLogs.reduce((s,l)=>s+(+l.delivered||0),0);
+    const tRate = tAssigned>0?Math.round((tDelivered/tAssigned)*100):0;
+    const tReports = allReports.filter(r=>r.teamId===t.id);
+    const tScore = tReports.length>0?Math.round(tReports.reduce((s,r)=>s+(r.analysis?.overallScore||0),0)/tReports.length):0;
+    return { ...t, rate:tRate, avgScore:tScore, members:members.length, delivered:tDelivered, assigned:tAssigned };
+  }).filter(t=>t.assigned>0).sort((a,b)=>b.rate-a.rate);
+
+  const medal = i => i===0?"🥇":i===1?"🥈":i===2?"🥉":`#${i+1}`;
+  const rateColor = r => r>=90?"#00E5A0":r>=70?"#FBBF24":"#FF6B6B";
+
+  return (
+    <div>
+      {/* Team Rankings */}
+      {teamStats.length>0&&<div style={{...S.card,marginBottom:16}}>
+        <div style={{fontSize:14,fontWeight:800,color:C.text,marginBottom:16,fontFamily:"Syne,sans-serif"}}>🏆 Team Rankings</div>
+        {teamStats.map((t,i)=>(
+          <div key={t.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderBottom:i<teamStats.length-1?"1px solid rgba(255,255,255,0.05)":"none"}}>
+            <div style={{fontSize:20,width:32,textAlign:"center",flexShrink:0}}>{medal(i)}</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:700,color:t.id===myTeamId?"#F97316":C.text}}>{t.name}{t.id===myTeamId?" (Your Team)":""}</div>
+              <div style={{fontSize:11,color:C.muted}}>{t.members} members · {t.delivered}/{t.assigned} delivered</div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontSize:18,fontWeight:900,color:rateColor(t.rate)}}>{t.rate}%</div>
+              <div style={{fontSize:10,color:C.muted}}>delivery rate</div>
+            </div>
+            {t.avgScore>0&&<div style={{textAlign:"right",minWidth:40}}>
+              <div style={{fontSize:14,fontWeight:700,color:t.avgScore>=70?C.green:t.avgScore>=50?C.yellow:C.red}}>{t.avgScore}</div>
+              <div style={{fontSize:9,color:C.muted}}>AI score</div>
+            </div>}
+          </div>
+        ))}
+      </div>}
+
+      {/* Individual Rankings */}
+      {stats.length>0&&<div style={{...S.card}}>
+        <div style={{fontSize:14,fontWeight:800,color:C.text,marginBottom:16,fontFamily:"Syne,sans-serif"}}>👤 Individual Rankings</div>
+        {stats.map((c,i)=>(
+          <div key={c.id} style={{display:"flex",alignItems:"center",gap:12,padding:"12px 0",borderBottom:i<stats.length-1?"1px solid rgba(255,255,255,0.05)":"none",background:c.teamId===myTeamId?"rgba(249,115,22,0.03)":"transparent",borderRadius:8,paddingLeft:8}}>
+            <div style={{fontSize:18,width:28,textAlign:"center",flexShrink:0}}>{medal(i)}</div>
+            <div style={{width:32,height:32,borderRadius:8,background:"linear-gradient(135deg,#F97316,#EA580C)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,color:"#fff",flexShrink:0}}>
+              {c.name.split(" ").map(w=>w[0]).join("").slice(0,2)}
+            </div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:13,fontWeight:700,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</div>
+              <div style={{fontSize:11,color:C.muted}}>{teams[c.teamId]?.name||"—"}</div>
+            </div>
+            <div style={{textAlign:"right"}}>
+              <div style={{fontSize:16,fontWeight:900,color:rateColor(c.rate)}}>{c.rate}%</div>
+              <div style={{fontSize:9,color:C.muted}}>{c.delivered}/{c.assigned}</div>
+            </div>
+            {c.avgScore>0&&<div style={{textAlign:"right",minWidth:40}}>
+              <div style={{fontSize:13,fontWeight:700,color:c.avgScore>=70?C.green:c.avgScore>=50?C.yellow:C.red}}>{c.avgScore}</div>
+              <div style={{fontSize:9,color:C.muted}}>AI</div>
+            </div>}
+          </div>
+        ))}
+      </div>}
+
+      {stats.length===0&&teamStats.length===0&&<div style={{...S.card,textAlign:"center",padding:"40px",color:C.muted}}>
+        No data yet for this period. Logs need to be approved to appear here.
+      </div>}
+    </div>
+  );
+}
+
+// ─── CHANGE PIN MODAL (self-service) ─────────────────────────
+function ChangePinModal({ user, onClose, saveUsersData, refresh }) {
+  const [oldPin,setOldPin]=useState("");
+  const [newPin,setNewPin]=useState("");
+  const [confirm,setConfirm]=useState("");
+  const [err,setErr]=useState("");
+  const [saving,setSaving]=useState(false);
+  const [done,setDone]=useState(false);
+
+  const save=async()=>{
+    setErr("");
+    if(oldPin!==user.pin){setErr("Current PIN is incorrect");return;}
+    if(newPin.length!==4||!/^\d{4}$/.test(newPin)){setErr("New PIN must be exactly 4 digits");return;}
+    if(newPin!==confirm){setErr("PINs do not match");return;}
+    if(newPin===oldPin){setErr("New PIN must be different from current PIN");return;}
+    setSaving(true);
+    try {
+      const all=await getUsers();
+      all[user.id]={...user,pin:newPin};
+      await saveUsersData(all);
+      await refresh();
+      setDone(true);
+      setTimeout(onClose,2000);
+    } catch(e){setErr("Failed to save. Try again.");}
+    setSaving(false);
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:2000,background:"rgba(0,0,0,0.88)",backdropFilter:"blur(8px)",display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{background:"#0C1320",border:"1px solid rgba(249,115,22,0.3)",borderRadius:20,padding:"28px 24px",maxWidth:340,width:"100%"}}>
+        <div style={{fontSize:18,fontWeight:800,color:"#F1F5FF",marginBottom:4,fontFamily:"Syne,sans-serif"}}>🔐 Change My PIN</div>
+        <div style={{fontSize:12,color:"#6A7A90",marginBottom:20}}>Choose a new 4-digit PIN</div>
+        {done
+          ? <div style={{textAlign:"center",padding:"20px 0"}}>
+              <div style={{fontSize:36,marginBottom:8}}>✅</div>
+              <div style={{fontSize:14,color:"#00E5A0",fontWeight:700}}>PIN changed successfully!</div>
+            </div>
+          : <>
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:11,fontWeight:700,color:"#6A7A90",textTransform:"uppercase",letterSpacing:"0.08em",display:"block",marginBottom:6}}>Current PIN</label>
+              <input type="password" maxLength={4} value={oldPin} onChange={e=>setOldPin(e.target.value.replace(/\D/g,"").slice(0,4))}
+                style={{width:"100%",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,padding:"12px 14px",color:"#F1F5FF",fontSize:18,letterSpacing:"0.25em",textAlign:"center",outline:"none"}}
+                placeholder="••••"/>
+            </div>
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:11,fontWeight:700,color:"#6A7A90",textTransform:"uppercase",letterSpacing:"0.08em",display:"block",marginBottom:6}}>New PIN</label>
+              <input type="password" maxLength={4} value={newPin} onChange={e=>setNewPin(e.target.value.replace(/\D/g,"").slice(0,4))}
+                style={{width:"100%",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,padding:"12px 14px",color:"#F1F5FF",fontSize:18,letterSpacing:"0.25em",textAlign:"center",outline:"none"}}
+                placeholder="••••"/>
+            </div>
+            <div style={{marginBottom:16}}>
+              <label style={{fontSize:11,fontWeight:700,color:"#6A7A90",textTransform:"uppercase",letterSpacing:"0.08em",display:"block",marginBottom:6}}>Confirm New PIN</label>
+              <input type="password" maxLength={4} value={confirm} onChange={e=>setConfirm(e.target.value.replace(/\D/g,"").slice(0,4))}
+                style={{width:"100%",background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.1)",borderRadius:10,padding:"12px 14px",color:"#F1F5FF",fontSize:18,letterSpacing:"0.25em",textAlign:"center",outline:"none"}}
+                placeholder="••••"/>
+            </div>
+            {err&&<div style={{color:"#FF6B6B",fontSize:12,marginBottom:12,textAlign:"center"}}>⚠️ {err}</div>}
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={onClose} style={{flex:1,background:"rgba(255,255,255,0.07)",border:"none",borderRadius:10,padding:"12px",color:"#C8D3E8",cursor:"pointer",fontSize:14,fontWeight:600}}>Cancel</button>
+              <button onClick={save} disabled={saving||newPin.length!==4||confirm.length!==4||oldPin.length!==4}
+                style={{flex:1,background:"#F97316",border:"none",borderRadius:10,padding:"12px",color:"#fff",cursor:"pointer",fontSize:14,fontWeight:700,opacity:saving||newPin.length!==4?0.5:1}}>
+                {saving?"Saving...":"Save PIN"}
+              </button>
+            </div>
+          </>
+        }
+      </div>
+    </div>
+  );
+}
+
 function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, onLogout, refresh }) {
   const [tab,setTab]=useState("dashboard"); const [period,setPeriod]=useState("month");
   const [viewReport,setViewReport]=useState(null); const [saved,setSaved]=useState("");
@@ -1255,7 +1507,7 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, o
           <div style={{ width:30,height:30,borderRadius:8,background:`linear-gradient(135deg,${C.green},#EA580C)`,display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden" }}><img src={LOGO_SRC} style={{width:"100%",height:"100%",objectFit:"contain",borderRadius:8}}/></div>
           <div><div style={{ fontSize:13,fontWeight:800 }}>Shoppyrex SalesCoach</div><div style={{ fontSize:9,color:C.green,textTransform:"uppercase",letterSpacing:"0.1em",fontWeight:600 }}>{teamTypeIcon(teamType)} {myTeam?.name}</div></div>
         </div>
-        <div style={{ display:"flex",gap:3 }}>{nb("dashboard","📊 Dashboard")}{nb("upload","🎙️ Upload Call")}{nb("log","📋 Daily Log")}{teamType!=="socialmedia"&&nb("noanswer","📵 No Answer")}{nb("history","🕐 History")}{nb("summary","✨ AI Summary")}</div>
+        <div style={{ display:"flex",gap:3 }}>{nb("dashboard","📊 Dashboard")}{nb("upload","🎙️ Upload Call")}{nb("log","📋 Daily Log")}{teamType!=="socialmedia"&&nb("noanswer","📵 No Answer")}{nb("history","🕐 History")}{nb("leaderboard","🏆 Leaderboard")}{nb("summary","✨ AI Summary")}</div>
         <div style={{ display:"flex",alignItems:"center",gap:10 }}>
           <div style={{ textAlign:"right" }}><div style={{ fontSize:12,fontWeight:700 }}>{user.name}</div><div style={{ fontSize:9,color:C.muted }}>Sales Closer</div></div>
           <button onClick={onLogout} style={{ background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 10px",color:C.muted,cursor:"pointer",fontSize:11 }}>Sign Out</button>
@@ -1384,6 +1636,14 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, o
             }
           </div>
         )}
+        {tab==="leaderboard"&&(
+          <div>
+            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4,fontFamily:"Syne,sans-serif" }}>🏆 Leaderboard</h1>
+            <p style={{ fontSize:13,color:C.muted,marginBottom:4 }}>See how your team and others are performing</p>
+            <PeriodFilter value={period} onChange={setPeriod}/>
+            <TeamLeaderboard users={users} teams={teams} allReports={allReports} allLogs={allLogs} period={period} myTeamId={user.teamId}/>
+          </div>
+        )}
         {tab==="summary"&&(
           <div>
             <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4,fontFamily:'Syne,sans-serif' }}>✨ AI Summary Reports</h1>
@@ -1398,9 +1658,9 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, o
 }
 
 // ─── TEAM LEAD PORTAL ─────────────────────────────────────────────────────────
-function TeamLeadPortal({ user, users, teams, allReports, allLogs, allNoAnswers, onLogout, refresh }) {
+function TeamLeadPortal({ user, users, teams, allReports, allLogs, allNoAnswers, onLogout, refresh, saveUsersData }) {
   const [tab,setTab]=useState("team"); const [period,setPeriod]=useState("month");
-  const [viewReport,setViewReport]=useState(null); const [msg,setMsg]=useState("");
+  const [viewReport,setViewReport]=useState(null); const [msg,setMsg]=useState(""); const [showChangePinTL,setShowChangePinTL]=useState(false); const [tlSummaryTarget,setTlSummaryTarget]=useState(null);
   const myTeam=teams[user.teamId]; const teamType=myTeam?.type||"sales";
   const myMembers=Object.values(users).filter(u=>u.teamId===user.teamId&&u.role==="closer");
   const myOwnReports=allReports.filter(r=>r.closerId===user.id);
@@ -1441,14 +1701,16 @@ function TeamLeadPortal({ user, users, teams, allReports, allLogs, allNoAnswers,
           {nb("analyses","🧠 AI Analyses")}
           {teamType!=="socialmedia"&&nb("approve", pendingLogs.length>0?`⏳ Approvals (${pendingLogs.length})`:"⏳ Approvals")}
           {nb("mycalls","🎙️ My Calls")}
-          {nb("mylog","📋 "+(teamType==="socialmedia"?"Team Log":"My Log"))}{nb("summary","✨ AI Summary")}
+          {nb("mylog","📋 "+(teamType==="socialmedia"?"Team Log":"My Log"))}{nb("leaderboard","🏆 Leaderboard")}{nb("summary","✨ AI Summary")}
         </div>
         <div style={{ display:"flex",alignItems:"center",gap:10 }}>
           <div style={{ textAlign:"right" }}><div style={{ fontSize:12,fontWeight:700 }}>{user.name}</div><div style={{ fontSize:9,color:C.muted }}>Team Lead · {teamType==="socialmedia"?"Social Media":teamType==="followup"?"Follow-Up":"Sales"}</div></div>
+          <ThemeToggle/><button onClick={()=>setShowChangePinTL(true)} style={{ background:"rgba(249,115,22,0.08)",border:"1px solid rgba(249,115,22,0.2)",borderRadius:8,padding:"4px 10px",color:"#FB923C",cursor:"pointer",fontSize:11,fontWeight:600 }}>🔐 PIN</button>
           <button onClick={onLogout} style={{ background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 10px",color:C.muted,cursor:"pointer",fontSize:11 }}>Sign Out</button>
         </div>
       </nav>
-      <main style={{ maxWidth:1150,margin:"0 auto",padding:"28px 20px",position:"relative",zIndex:1 }}>
+      {showChangePinTL&&<ChangePinModal user={user} onClose={()=>setShowChangePinTL(false)} saveUsersData={saveUsersData} refresh={refresh}/>}
+      <main style={{ width:"100%",maxWidth:1400,margin:"0 auto",padding:"24px 32px",position:"relative",zIndex:1 }}>
         {msg&&<div style={{ background:"rgba(0,229,160,0.1)",border:"1px solid rgba(0,229,160,0.2)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:C.green }}>{msg}</div>}
 
         {tab==="team"&&(
@@ -1626,6 +1888,36 @@ function TeamLeadPortal({ user, users, teams, allReports, allLogs, allNoAnswers,
             )}
           </div>
         )}
+        {tab==="leaderboard"&&(
+          <div>
+            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4,fontFamily:"Syne,sans-serif" }}>🏆 Leaderboard</h1>
+            <p style={{ fontSize:13,color:C.muted,marginBottom:4 }}>Full performance rankings</p>
+            <PeriodFilter value={period} onChange={setPeriod}/>
+            <TeamLeaderboard users={users} teams={teams} allReports={allReports} allLogs={allLogs} period={period} myTeamId={user.teamId}/>
+          </div>
+        )}
+        {tab==="summary"&&(
+          <div>
+            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4,fontFamily:"Syne,sans-serif" }}>✨ AI Summary Reports</h1>
+            <p style={{ fontSize:13,color:C.muted,marginBottom:20 }}>AI insights — yourself, your team, or individual members</p>
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:10}}>Generate report for:</div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
+                {[{id:"team",name:"🏢 My Whole Team"},...myMembers.map(m=>({id:m.id,name:m.name})),{id:user.id+"_self",name:"👤 Myself"}].map(opt=>(
+                  <button key={opt.id} onClick={()=>setTlSummaryTarget(opt.id)}
+                    style={{background:tlSummaryTarget===opt.id?"rgba(249,115,22,0.2)":"rgba(255,255,255,0.05)",border:"1px solid "+(tlSummaryTarget===opt.id?"rgba(249,115,22,0.5)":"rgba(255,255,255,0.1)"),borderRadius:8,padding:"7px 14px",color:tlSummaryTarget===opt.id?C.orange:C.soft,cursor:"pointer",fontSize:12,fontWeight:600}}>
+                    {opt.name}
+                  </button>
+                ))}
+              </div>
+              {tlSummaryTarget&&<AISummaryReport
+                user={tlSummaryTarget==="team"?{name:myTeam?.name||"My Team",id:"team"}:tlSummaryTarget===user.id+"_self"?user:users[tlSummaryTarget]||{name:"Unknown"}}
+                allReports={tlSummaryTarget==="team"?teamReports:tlSummaryTarget===user.id+"_self"?myOwnReports:allReports.filter(r=>r.closerId===tlSummaryTarget)}
+                teamType={teamType}
+              />}
+            </div>
+          </div>
+        )}
       </main>
       {viewReport&&<ReportModal report={viewReport} onClose={()=>setViewReport(null)}/>}
     </div>
@@ -1699,10 +1991,12 @@ function ManagementDashboard({ user, users, teams, allReports, allLogs, allNoAns
         </div>
         <div style={{ display:"flex",alignItems:"center",gap:10 }}>
           <div style={{ textAlign:"right" }}><div style={{ fontSize:12,fontWeight:700 }}>{user.name}</div><div style={{ fontSize:9,color:C.muted }}>{ROLE_LABELS[user.role]}</div></div>
+          <ThemeToggle/>
           <button onClick={onLogout} style={{ background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 10px",color:C.muted,cursor:"pointer",fontSize:11 }}>Sign Out</button>
         </div>
       </nav>
-      <main style={{ maxWidth:1220,margin:"0 auto",padding:"28px 20px",position:"relative",zIndex:1 }}>
+      {showChangePinTL&&<ChangePinModal user={user} onClose={()=>setShowChangePinTL(false)} saveUsersData={saveUsersData} refresh={refresh}/>}
+      <main style={{ width:"100%",maxWidth:1400,margin:"0 auto",padding:"24px 32px",position:"relative",zIndex:1 }}>
         {msg&&<div style={{ background:"rgba(0,229,160,0.1)",border:"1px solid rgba(0,229,160,0.2)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:C.green }}>{msg}</div>}
 
         {tab==="overview"&&(
@@ -1999,8 +2293,8 @@ function ManagementDashboard({ user, users, teams, allReports, allLogs, allNoAns
                     </td>
                     <td style={S.td}><span style={S.pill(a)}>{ROLE_LABELS[u.role]}</span></td>
                     <td style={S.td}>{teams[u.teamId]?`${teamTypeIcon(teams[u.teamId]?.type)} ${teams[u.teamId]?.name}`:"—"}</td>
-                    <td style={{ ...S.td,fontFamily:"monospace",letterSpacing:"0.15em",color:C.muted }}>{u.pin}</td>
-                    <td style={S.td}><div style={{display:"flex",gap:8}}>{canEditName(u)&&<EditNameInline uid={u.id} currentName={u.name} users={users} saveUsersData={saveUsersData} refresh={refresh} flash={flash}/>}{["ceo","gm"].includes(user.role)&&<button onClick={()=>setResetPinTarget(u)} style={{background:"rgba(249,115,22,0.12)",border:"1px solid rgba(249,115,22,0.25)",borderRadius:8,padding:"6px 12px",color:C.orange,cursor:"pointer",fontSize:12,fontWeight:600}}>🔑 Reset PIN</button>}{canRemove(u)&&<button onClick={()=>removeUser(u.id)} style={{...S.btnDanger,padding:"6px 14px",fontSize:13}}>Remove</button>}</div></td>
+                    <td style={{ ...S.td,fontFamily:"monospace",letterSpacing:"0.15em",color:C.muted }}>{(u.role==="ceo"&&user.role!=="ceo")||(u.role==="gm"&&!["ceo","gm"].includes(user.role))?"••••":u.pin}</td>
+                    <td style={S.td}><div style={{display:"flex",gap:8}}>{canEditName(u)&&<EditNameInline uid={u.id} currentName={u.name} users={users} saveUsersData={saveUsersData} refresh={refresh} flash={flash}/>}{["ceo","gm"].includes(user.role)&&!(u.role==="ceo"&&user.role!=="ceo")&&!(u.role==="gm"&&user.role==="gm")&&<button onClick={()=>setResetPinTarget(u)} style={{background:"rgba(249,115,22,0.12)",border:"1px solid rgba(249,115,22,0.25)",borderRadius:8,padding:"6px 12px",color:C.orange,cursor:"pointer",fontSize:12,fontWeight:600}}>🔑 Reset PIN</button>}{canRemove(u)&&<button onClick={()=>removeUser(u.id)} style={{...S.btnDanger,padding:"6px 14px",fontSize:13}}>Remove</button>}</div></td>
                   </tr>
                 );})}
                 </tbody>
@@ -2013,18 +2307,27 @@ function ManagementDashboard({ user, users, teams, allReports, allLogs, allNoAns
             <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4,fontFamily:'Syne,sans-serif' }}>✨ AI Summary Reports</h1>
             <p style={{ fontSize:13,color:C.muted,marginBottom:20 }}>Full team performance insights — day, week, month</p>
             <div style={{ marginBottom:16 }}>
-              <div style={{ fontSize:13,fontWeight:700,color:C.text,marginBottom:12 }}>Select a closer:</div>
+              <div style={{ fontSize:13,fontWeight:700,color:C.text,marginBottom:10 }}>Quick select by team:</div>
+              <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginBottom:16 }}>
+                {[{id:"all",name:"🏢 All Staff"},...Object.values(teams).map(t=>({id:"team_"+t.id,name:"👥 "+t.name}))].map(opt=>(
+                  <button key={opt.id} onClick={()=>setSummaryTarget(opt.id)}
+                    style={{ background:summaryTarget===opt.id?"rgba(249,115,22,0.2)":"rgba(255,255,255,0.05)", border:"1px solid "+(summaryTarget===opt.id?"rgba(249,115,22,0.5)":"rgba(255,255,255,0.1)"), borderRadius:8, padding:"7px 14px", color:summaryTarget===opt.id?C.orange:C.soft, cursor:"pointer", fontSize:12, fontWeight:600 }}>
+                    {opt.name}
+                  </button>
+                ))}
+              </div>
+              <div style={{ fontSize:13,fontWeight:700,color:C.text,marginBottom:10 }}>Or select individual:</div>
               <div style={{ display:"flex",gap:8,flexWrap:"wrap",marginBottom:20 }}>
-                {[{id:"all",name:"🏢 All Staff"},...Object.values(users).filter(u=>["closer","teamlead"].includes(u.role))].map(u=>(
-                  <button key={u.id} onClick={()=>setSummaryTarget(u.id||"all")}
-                    style={{ background:summaryTarget===u.id?"rgba(249,115,22,0.2)":"rgba(255,255,255,0.05)", border:"1px solid "+(summaryTarget===u.id?"rgba(249,115,22,0.5)":"rgba(255,255,255,0.1)"), borderRadius:8, padding:"7px 14px", color:summaryTarget===u.id?C.orange:C.soft, cursor:"pointer", fontSize:12, fontWeight:600 }}>
+                {Object.values(users).filter(u=>["closer","teamlead"].includes(u.role)).map(u=>(
+                  <button key={u.id} onClick={()=>setSummaryTarget(u.id)}
+                    style={{ background:summaryTarget===u.id?"rgba(249,115,22,0.2)":"rgba(255,255,255,0.05)", border:"1px solid "+(summaryTarget===u.id?"rgba(249,115,22,0.5)":"rgba(255,255,255,0.1)"), borderRadius:8, padding:"6px 12px", color:summaryTarget===u.id?C.orange:C.soft, cursor:"pointer", fontSize:11, fontWeight:600 }}>
                     {u.name}
                   </button>
                 ))}
               </div>
               {summaryTarget&&<AISummaryReport
-                user={summaryTarget==="all"?{name:"All Staff",id:"all"}:users[summaryTarget]||{name:"Unknown",id:summaryTarget}}
-                allReports={summaryTarget==="all"?allReports:allReports.filter(r=>r.closerId===summaryTarget)}
+                user={summaryTarget==="all"?{name:"All Staff",id:"all"}:summaryTarget.startsWith("team_")?{name:teams[summaryTarget.replace("team_","")]?.name||"Team",id:summaryTarget}:users[summaryTarget]||{name:"Unknown",id:summaryTarget}}
+                allReports={summaryTarget==="all"?allReports:summaryTarget.startsWith("team_")?allReports.filter(r=>r.teamId===summaryTarget.replace("team_","")):allReports.filter(r=>r.closerId===summaryTarget)}
                 teamType="sales"
               />}
             </div>
@@ -2134,8 +2437,8 @@ function App() {
 
   const props={ user:currentUser, users, teams, allReports:reports, allLogs:logs, allNoAnswers:noAnswers, onLogout:()=>setCurrentUser(null), refresh };
   const role=currentUser.role;
-  if(role==="closer") return <CloserPortal {...props}/>;
-  if(role==="teamlead") return <TeamLeadPortal {...props}/>;
+  if(role==="closer") return <CloserPortal {...props} saveUsersData={async u=>{await saveUsers(u);setUsers(u);}}/>;
+  if(role==="teamlead") return <TeamLeadPortal {...props} saveUsersData={async u=>{await saveUsers(u);setUsers(u);}}/>;
   return <ManagementDashboard {...props} saveUsersData={async u=>{await saveUsers(u);setUsers(u);}}/>;
 }
 
