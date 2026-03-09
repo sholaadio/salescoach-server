@@ -25,9 +25,10 @@
     @keyframes spin { to{transform:rotate(360deg)} }
     .fade-up { animation:fadeUp 0.35s ease both; }
     @media print {
-      nav, .no-print { display:none !important; }
-      body { background:white !important; }
-      #report-print-area { background:white !important; color:#000 !important; position:fixed; top:0; left:0; width:100%; }
+      nav, .no-print, header { display:none !important; }
+      body { background:white !important; color:#000 !important; }
+      #report-print-area { background:white !important; color:#000 !important; position:fixed; top:0; left:0; width:100%; padding:24px; }
+      #report-print-area * { color:#000 !important; background:transparent !important; border-color:#ddd !important; }
     }
     @media (max-width:768px) {
       nav { padding:0 8px !important; overflow-x:auto; -webkit-overflow-scrolling:touch; }
@@ -1400,6 +1401,125 @@ function TeamLeaderboard({ users, teams, allReports, allLogs, period, myTeamId }
   );
 }
 
+
+// ─── PERMISSIONS SYSTEM ──────────────────────────────────────
+const DEFAULT_PERMISSIONS = {
+  ceo:         { viewReports:true,  viewCommission:true,  approveLogs:true,  manageUsers:true,  generateSummary:true, viewLeaderboard:true, uploadCalls:true,  logSales:true,  viewAllTeams:true,  resetPins:true,  manageRoles:true },
+  gm:          { viewReports:true,  viewCommission:true,  approveLogs:true,  manageUsers:true,  generateSummary:true, viewLeaderboard:true, uploadCalls:false, logSales:false, viewAllTeams:true,  resetPins:true,  manageRoles:false },
+  head_sales:  { viewReports:true,  viewCommission:true,  approveLogs:false, manageUsers:false, generateSummary:true, viewLeaderboard:true, uploadCalls:false, logSales:false, viewAllTeams:true,  resetPins:false, manageRoles:false },
+  head_creative:{ viewReports:true, viewCommission:false, approveLogs:false, manageUsers:false, generateSummary:false,viewLeaderboard:true, uploadCalls:false, logSales:false, viewAllTeams:true,  resetPins:false, manageRoles:false },
+  hr:          { viewReports:true,  viewCommission:true,  approveLogs:false, manageUsers:true,  generateSummary:true, viewLeaderboard:true, uploadCalls:false, logSales:false, viewAllTeams:true,  resetPins:false, manageRoles:false },
+  teamlead:    { viewReports:true,  viewCommission:true,  approveLogs:true,  manageUsers:false, generateSummary:true, viewLeaderboard:true, uploadCalls:true,  logSales:true,  viewAllTeams:false, resetPins:false, manageRoles:false },
+  closer:      { viewReports:true,  viewCommission:true,  approveLogs:false, manageUsers:false, generateSummary:true, viewLeaderboard:true, uploadCalls:true,  logSales:true,  viewAllTeams:false, resetPins:false, manageRoles:false },
+};
+
+const PERMISSION_LABELS = {
+  viewReports:     "View all reports & analyses",
+  viewCommission:  "View commission data",
+  approveLogs:     "Approve/reject daily logs",
+  manageUsers:     "Manage user accounts",
+  generateSummary: "Generate AI summary reports",
+  viewLeaderboard: "View leaderboard",
+  uploadCalls:     "Upload & analyse calls",
+  logSales:        "Submit daily sales log",
+  viewAllTeams:    "View all teams",
+  resetPins:       "Reset other users' PINs",
+  manageRoles:     "Manage roles & permissions",
+};
+
+function getPerms(user, allUsers) {
+  // Check for CEO-set custom permissions stored on user object
+  const custom = user?.customPerms;
+  const defaults = DEFAULT_PERMISSIONS[user?.role] || DEFAULT_PERMISSIONS.closer;
+  return custom ? { ...defaults, ...custom } : defaults;
+}
+
+// ─── PERMISSIONS SETTINGS PANEL (CEO only) ──────────────────
+function PermissionsPanel({ users, saveUsersData, refresh, flash }) {
+  const [selectedUid, setSelectedUid] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  const selectedUser = selectedUid ? users[selectedUid] : null;
+  const perms = selectedUser ? getPerms(selectedUser) : null;
+
+  const toggle = async (key) => {
+    if (!selectedUser) return;
+    setSaving(true);
+    const currentPerms = getPerms(selectedUser);
+    const newCustom = { ...(selectedUser.customPerms||{}), [key]: !currentPerms[key] };
+    const updated = { ...users, [selectedUid]: { ...selectedUser, customPerms: newCustom } };
+    await saveUsersData(updated);
+    await refresh();
+    setSaving(false);
+    flash("✅ Permission updated");
+  };
+
+  const resetToDefault = async () => {
+    if (!selectedUser) return;
+    setSaving(true);
+    const updated = { ...users, [selectedUid]: { ...selectedUser, customPerms: undefined } };
+    await saveUsersData(updated);
+    await refresh();
+    setSaving(false);
+    flash("✅ Reset to role defaults");
+  };
+
+  const nonCeoUsers = Object.values(users).filter(u=>u.role!=="ceo").sort((a,b)=>a.name.localeCompare(b.name));
+
+  return (
+    <div>
+      <h1 style={{fontSize:22,fontWeight:900,marginBottom:4,fontFamily:"Syne,sans-serif"}}>🛡️ Role & Permissions</h1>
+      <p style={{fontSize:13,color:C.muted,marginBottom:20}}>Customise what each person can access. Changes override their role defaults.</p>
+
+      {/* User selector */}
+      <div style={{...S.card,marginBottom:16}}>
+        <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:12}}>Select a staff member:</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {nonCeoUsers.map(u=>(
+            <button key={u.id} onClick={()=>setSelectedUid(u.id)}
+              style={{background:selectedUid===u.id?"rgba(249,115,22,0.2)":"rgba(255,255,255,0.05)",border:"1px solid "+(selectedUid===u.id?"rgba(249,115,22,0.5)":"rgba(255,255,255,0.1)"),borderRadius:8,padding:"7px 14px",color:selectedUid===u.id?C.orange:C.soft,cursor:"pointer",fontSize:12,fontWeight:600}}>
+              {u.name}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Permission toggles */}
+      {selectedUser&&perms&&(
+        <div style={{...S.card}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,flexWrap:"wrap",gap:8}}>
+            <div>
+              <div style={{fontSize:15,fontWeight:800,color:C.text}}>{selectedUser.name}</div>
+              <div style={{fontSize:12,color:C.muted}}>{ROLE_LABELS[selectedUser.role]} · {selectedUser.customPerms?"Custom permissions":"Default role permissions"}</div>
+            </div>
+            {selectedUser.customPerms&&<button onClick={resetToDefault} style={{background:"rgba(255,107,107,0.1)",border:"1px solid rgba(255,107,107,0.25)",borderRadius:8,padding:"6px 12px",color:"#FF6B6B",cursor:"pointer",fontSize:12,fontWeight:600}}>↺ Reset to defaults</button>}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            {Object.entries(PERMISSION_LABELS).map(([key,label])=>{
+              const on = perms[key];
+              const isDefault = DEFAULT_PERMISSIONS[selectedUser.role]?.[key];
+              const changed = selectedUser.customPerms && key in selectedUser.customPerms;
+              return (
+                <div key={key} onClick={()=>toggle(key)}
+                  style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:on?"rgba(0,229,160,0.05)":"rgba(255,255,255,0.02)",border:"1px solid "+(on?"rgba(0,229,160,0.2)":"rgba(255,255,255,0.07)"),borderRadius:10,cursor:"pointer",userSelect:"none",transition:"all 0.15s"}}>
+                  <div style={{width:36,height:20,borderRadius:10,background:on?"#00E5A0":"rgba(255,255,255,0.1)",position:"relative",flexShrink:0,transition:"background 0.2s"}}>
+                    <div style={{position:"absolute",top:2,left:on?18:2,width:16,height:16,borderRadius:8,background:"#fff",transition:"left 0.2s",boxShadow:"0 1px 4px rgba(0,0,0,0.3)"}}/>
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:11,fontWeight:700,color:on?C.text:C.muted,lineHeight:1.3}}>{label}</div>
+                    {changed&&<div style={{fontSize:9,color:C.orange,marginTop:1}}>Custom override</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          {saving&&<div style={{textAlign:"center",color:C.orange,fontSize:12,marginTop:12}}>Saving...</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── CHANGE PIN MODAL (self-service) ─────────────────────────
 function ChangePinModal({ user, onClose, saveUsersData, refresh }) {
   const [oldPin,setOldPin]=useState("");
@@ -1471,7 +1591,8 @@ function ChangePinModal({ user, onClose, saveUsersData, refresh }) {
   );
 }
 
-function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, onLogout, refresh }) {
+function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, onLogout, refresh, saveUsersData }) {
+  const closerPerms = getPerms(user, users);
   const [tab,setTab]=useState("dashboard"); const [period,setPeriod]=useState("month");
   const [viewReport,setViewReport]=useState(null); const [saved,setSaved]=useState("");
   const [showOnboarding,setShowOnboarding]=useState(()=>!localStorage.getItem("sc_onboarded_"+user.id));
@@ -1935,6 +2056,7 @@ function EditNameInline({uid,currentName,users,saveUsersData,refresh,flash}){
 
 // ─── MANAGEMENT DASHBOARD ─────────────────────────────────────────────────────
 function ManagementDashboard({ user, users, teams, allReports, allLogs, allNoAnswers, onLogout, refresh, saveUsersData }) {
+  const perms = getPerms(user, users);
   const [tab,setTab]=useState("overview"); const [period,setPeriod]=useState("month");
   const [viewReport,setViewReport]=useState(null); const [msg,setMsg]=useState("");
   const [newName,setNewName]=useState(""); const [newPin,setNewPin]=useState(""); const [newRole,setNewRole]=useState("closer"); const [newTeam,setNewTeam]=useState("team1"); const [showAdd,setShowAdd]=useState(false); const [saving,setSaving]=useState(false); const [resetPinTarget,setResetPinTarget]=useState(null); const [summaryTarget,setSummaryTarget]=useState(null);
@@ -1987,7 +2109,7 @@ function ManagementDashboard({ user, users, teams, allReports, allLogs, allNoAns
           <div><div style={{ fontSize:13,fontWeight:800 }}>Shoppyrex SalesCoach</div><div style={{ fontSize:9,color:accentColor,textTransform:"uppercase",letterSpacing:"0.1em",fontWeight:600 }}>{ROLE_LABELS[user.role]}</div></div>
         </div>
         <div style={{ display:"flex",gap:2,flexWrap:"wrap" }}>
-          {nb("overview","📊 Overview")}{nb("teams","🏢 Teams")}{nb("analyses","🧠 Analyses")}{nb("leaderboard","🏆 Leaderboard")}{nb("commission","💰 Commission")}{nb("reports","📋 Reports")}{nb("manage","⚙️ Manage")}{nb("summary","✨ AI Summary")}
+          {nb("overview","📊 Overview")}{nb("teams","🏢 Teams")}{nb("analyses","🧠 Analyses")}{nb("leaderboard","🏆 Leaderboard")}{perms.viewCommission&&nb("commission","💰 Commission")}{nb("reports","📋 Reports")}{nb("manage","⚙️ Manage")}{user.role==="ceo"&&nb("permissions","🛡️ Roles")}{nb("summary","✨ AI Summary")}
         </div>
         <div style={{ display:"flex",alignItems:"center",gap:10 }}>
           <div style={{ textAlign:"right" }}><div style={{ fontSize:12,fontWeight:700 }}>{user.name}</div><div style={{ fontSize:9,color:C.muted }}>{ROLE_LABELS[user.role]}</div></div>
@@ -2302,7 +2424,10 @@ function ManagementDashboard({ user, users, teams, allReports, allLogs, allNoAns
             </div>
           </div>
         )}
-        {tab==="summary"&&(
+        {tab==="permissions"&&user.role==="ceo"&&(
+          <PermissionsPanel users={users} saveUsersData={saveUsersData} refresh={refresh} flash={flash}/>
+        )}
+                {tab==="summary"&&(
           <div>
             <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4,fontFamily:'Syne,sans-serif' }}>✨ AI Summary Reports</h1>
             <p style={{ fontSize:13,color:C.muted,marginBottom:20 }}>Full team performance insights — day, week, month</p>
