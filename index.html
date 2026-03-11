@@ -45,7 +45,6 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
   <script type="text/babel">
-
 const {useState,useEffect,useRef}=React;
 const LOGO_SRC=window.LOGO_SRC;
 
@@ -356,24 +355,33 @@ function OnboardingModal({ user, onClose }) {
 }
 
 // ─── AI SUMMARY REPORT ───────────────────────────────────────────────────────
-function AISummaryReport({ user, users, allReports, allLogs, teams, teamType }) {
+function AISummaryReport({ user, users, allReports, allLogs, teams, teamType, targetIds, scopeLabel }) {
   const C = getTheme();
   const [period, setPeriod] = useState("today");
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState(null);
   const [error, setError] = useState("");
 
-  const periodLabel = { today:"Today's", week:"This Week's", month:"This Month's" };
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
+  const periodLabel = { today:"Today's", week:"This Week's", last14:"Last 14 Days", month:"This Month's", custom:"Custom Range" };
 
   const getReports = () => {
     const now = new Date();
+    // targetId = user.id for self, or array of ids for team/individual
+    const ids = targetIds || [user.id];
     return allReports.filter(r => {
-      if (r.closerId !== user.id) return false;
+      if (!ids.includes(r.closerId)) return false;
       const d = new Date(r.createdAt);
       if (period === "today") return d.toDateString() === now.toDateString();
       if (period === "week") { const w=new Date(now); w.setDate(w.getDate()-7); return d>=w; }
+      if (period === "last14") { const w=new Date(now); w.setDate(w.getDate()-14); return d>=w; }
       if (period === "month") { const m=new Date(now); m.setMonth(m.getMonth()-1); return d>=m; }
-      return false;
+      if (period === "custom" && customFrom && customTo) {
+        const from=new Date(customFrom); const to=new Date(customTo); to.setHours(23,59,59);
+        return d>=from && d<=to;
+      }
+      return true;
     });
   };
 
@@ -427,6 +435,7 @@ function AISummaryReport({ user, users, allReports, allLogs, teams, teamType }) 
     <div>
       <div style={{background:"rgba(255,255,255,0.03)",border:"1px solid rgba(255,255,255,0.07)",borderRadius:16,padding:"20px 24px",marginBottom:16}}>
         <div style={{fontWeight:700,fontSize:14,color:"#F1F5FF",marginBottom:12}}>Select period:</div>
+        {scopeLabel && <div style={{fontSize:13,fontWeight:700,color:"#F97316",marginBottom:10}}>📊 Report for: {scopeLabel}</div>}
         <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
           {Object.entries(periodLabel).map(([k,v])=>(
             <button key={k} onClick={()=>{setPeriod(k);setSummary(null);}}
@@ -435,6 +444,12 @@ function AISummaryReport({ user, users, allReports, allLogs, teams, teamType }) 
             </button>
           ))}
         </div>
+        {period==="custom" && (
+          <div style={{display:"flex",gap:10,marginBottom:14,flexWrap:"wrap"}}>
+            <div><label style={{fontSize:11,color:"#6A7A90",display:"block",marginBottom:4}}>From</label><input type="date" value={customFrom} onChange={e=>{setCustomFrom(e.target.value);setSummary(null);}} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:8,padding:"7px 10px",color:"#F1F5FF",fontSize:13}}/></div>
+            <div><label style={{fontSize:11,color:"#6A7A90",display:"block",marginBottom:4}}>To</label><input type="date" value={customTo} onChange={e=>{setCustomTo(e.target.value);setSummary(null);}} style={{background:"rgba(255,255,255,0.06)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:8,padding:"7px 10px",color:"#F1F5FF",fontSize:13}}/></div>
+          </div>
+        )}
         <div style={{fontSize:12,color:"#6A7A90",marginBottom:14}}>
           {getReports().length} call reports found for {periodLabel[period].toLowerCase()} period
         </div>
@@ -534,7 +549,7 @@ function AISummaryReport({ user, users, allReports, allLogs, teams, teamType }) 
 }
 
 // ─── CHANGE PIN MODAL ────────────────────────────────────────────────────────
-function ChangePinModal({ user, onClose, saveUsersData, refresh }) {
+function ChangePinModal({ user, onClose, saveUsersData, refresh, allUsers }) {
   const C = getTheme();
   const [oldPin, setOldPin] = useState("");
   const [newPin, setNewPin] = useState("");
@@ -549,14 +564,19 @@ function ChangePinModal({ user, onClose, saveUsersData, refresh }) {
     if (newPin.length < 4) { setError("New PIN must be at least 4 digits"); return; }
     if (newPin !== confirm) { setError("PINs do not match"); return; }
     setSaving(true);
-    // saveUsersData not available in closer portal - use API directly
     try {
-      await fetch(SERVER+"/users/"+user.id, {
+      // Always use direct API call — works in every portal
+      const res = await fetch(SERVER+"/users/"+user.id, {
         method:"PUT", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({pin: newPin})
       });
+      if (!res.ok) throw new Error("Server error");
+      if (saveUsersData && allUsers) {
+        await saveUsersData({...allUsers, [user.id]: {...user, pin: newPin}});
+      }
+      if (refresh) await refresh();
       setDone(true);
-    } catch(e) { setError("Failed to update PIN"); }
+    } catch(e) { setError("Failed to update PIN. Check connection."); }
     setSaving(false);
   };
 
@@ -1253,6 +1273,16 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, o
             <PerformanceWarning logs={allLogs} userId={user.id}/>
             <PeriodFilter value={period} onChange={setPeriod}/>
             {todayLog&&<CommissionCard comm={todayLog.commission} label="Today's Commission"/>}
+            {allMyReports.length>=3&&(
+              <div style={{ ...S.card,marginBottom:16 }}>
+                <div style={{ fontSize:12,fontWeight:700,color:C.muted,marginBottom:8 }}>📈 PERFORMANCE TREND — LAST 30 DAYS</div>
+                <TrendChart reports={allMyReports}/>
+                <div style={{ display:"flex",justifyContent:"space-between",marginTop:6,fontSize:10,color:C.muted }}>
+                  <span>Older</span>
+                  <span>Recent</span>
+                </div>
+              </div>
+            )}
             <div style={{ ...S.g4,marginBottom:20 }}>
               {[
                 {l:"Total Calls",v:totalCalls,c:C.green},
@@ -1370,9 +1400,9 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, o
         {tab==="leaderboard"&&(
           <div>
             <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>🏆 Leaderboard</h1>
-            <p style={{ fontSize:13,color:C.muted,marginBottom:16 }}>See how your team stacks up</p>
+            <p style={{ fontSize:13,color:C.muted,marginBottom:16 }}>See how all teams are doing &amp; where your team ranks</p>
             <PeriodFilter value={period} onChange={setPeriod}/>
-            <TeamLeaderboard users={users} teams={teams} allReports={allReports} allLogs={allLogs} period={period} myTeamId={user.teamId} showAllIndividuals={false}/>
+            <TeamLeaderboard users={users} teams={teams} allReports={allReports} allLogs={allLogs} period={period} myTeamId={user.teamId} showAllIndividuals={false} closerView={true}/>
           </div>
         )}
         {tab==="summary"&&(
@@ -1384,7 +1414,7 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, o
         )}
       </main>
       {viewReport&&<ReportModal report={viewReport} onClose={()=>setViewReport(null)}/>}
-      {showChangePin&&<ChangePinModal user={user} onClose={()=>setShowChangePin(false)} refresh={refresh}/>}
+      {showChangePin&&<ChangePinModal user={user} onClose={()=>setShowChangePin(false)} refresh={refresh} saveUsersData={saveUsersData} allUsers={users}/>}
       {showOnboarding&&<OnboardingModal user={user} onClose={closeOnboarding}/>}
     </div>
   );
@@ -1447,8 +1477,9 @@ function TeamLeadPortal({ user, users, teams, allReports, allLogs, allNoAnswers,
           <button onClick={onLogout} style={{ background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 10px",color:C.muted,cursor:"pointer",fontSize:11 }}>Sign Out</button>
         </div>
       </nav>
-      <main style={{ maxWidth:1150,margin:"0 auto",padding:"28px 20px",position:"relative",zIndex:1 }}>
+      <main style={{ width:"100%",maxWidth:1400,margin:"0 auto",padding:"24px 32px",position:"relative",zIndex:1 }}>
         {msg&&<div style={{ background:"rgba(0,229,160,0.1)",border:"1px solid rgba(0,229,160,0.2)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:C.green }}>{msg}</div>}
+        <DailyReminderBanner allLogs={allLogs} userId={user.id} onLogNow={()=>setTab("mylog")}/>
 
         {tab==="team"&&(
           <div>
@@ -1627,10 +1658,10 @@ function TeamLeadPortal({ user, users, teams, allReports, allLogs, allNoAnswers,
         )}
         {tab==="leaderboard"&&(
           <div>
-            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>🏆 Team Leaderboard</h1>
-            <p style={{ fontSize:13,color:C.muted,marginBottom:16 }}>Team Rankings + your team's individual rankings</p>
+            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>🏆 Leaderboard</h1>
+            <p style={{ fontSize:13,color:C.muted,marginBottom:16 }}>All team rankings + individual rankings within your team</p>
             <PeriodFilter value={period} onChange={setPeriod}/>
-            <TeamLeaderboard users={users} teams={teams} allReports={allReports} allLogs={allLogs} period={period} myTeamId={user.teamId} showAllIndividuals={false}/>
+            <TeamLeaderboard users={users} teams={teams} allReports={allReports} allLogs={allLogs} period={period} myTeamId={user.teamId} showAllIndividuals={false} teamLeadView={true}/>
           </div>
         )}
         {tab==="summary"&&(
@@ -1640,6 +1671,10 @@ function TeamLeadPortal({ user, users, teams, allReports, allLogs, allNoAnswers,
             <div style={{...S.card,marginBottom:16}}>
               <div style={{fontSize:13,fontWeight:700,marginBottom:8}}>Generate report for:</div>
               <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <button onClick={()=>setSummaryTarget("__team__")}
+                  style={{background:summaryTarget==="__team__"?"rgba(249,115,22,0.15)":"rgba(255,255,255,0.04)",border:"1px solid "+(summaryTarget==="__team__"?"rgba(249,115,22,0.4)":"rgba(255,255,255,0.08)"),borderRadius:20,padding:"7px 14px",color:summaryTarget==="__team__"?C.orange:C.muted,cursor:"pointer",fontSize:12,fontWeight:600}}>
+                  🏢 Entire Team
+                </button>
                 <button onClick={()=>setSummaryTarget(user.id)}
                   style={{background:summaryTarget===user.id?"rgba(249,115,22,0.15)":"rgba(255,255,255,0.04)",border:"1px solid "+(summaryTarget===user.id?"rgba(249,115,22,0.4)":"rgba(255,255,255,0.08)"),borderRadius:20,padding:"7px 14px",color:summaryTarget===user.id?C.orange:C.muted,cursor:"pointer",fontSize:12,fontWeight:600}}>
                   Myself
@@ -1652,14 +1687,25 @@ function TeamLeadPortal({ user, users, teams, allReports, allLogs, allNoAnswers,
                 ))}
               </div>
             </div>
-            {summaryTarget && users[summaryTarget] && (
-              <AISummaryReport user={users[summaryTarget]} users={users} allReports={allReports} allLogs={allLogs} teams={teams} teamType={teams[users[summaryTarget].teamId]?.type||teamType}/>
-            )}
+            {summaryTarget === "__team__" ? (
+              <AISummaryReport
+                user={user} users={users} allReports={allReports} allLogs={allLogs} teams={teams} teamType={teamType}
+                targetIds={myMembers.map(m=>m.id).concat([user.id])}
+                scopeLabel={myTeam?.name + " (Full Team)"}
+              />
+            ) : summaryTarget && users[summaryTarget] ? (
+              <AISummaryReport
+                user={users[summaryTarget]} users={users} allReports={allReports} allLogs={allLogs} teams={teams}
+                teamType={teams[users[summaryTarget].teamId]?.type||teamType}
+                targetIds={[summaryTarget]}
+                scopeLabel={users[summaryTarget].name}
+              />
+            ) : null}
           </div>
         )}
       </main>
       {viewReport&&<ReportModal report={viewReport} onClose={()=>setViewReport(null)}/>}
-      {showChangePin&&<ChangePinModal user={user} onClose={()=>setShowChangePin(false)} refresh={refresh}/>}
+      {showChangePin&&<ChangePinModal user={user} onClose={()=>setShowChangePin(false)} refresh={refresh} saveUsersData={saveUsersData} allUsers={users}/>}
     </div>
   );
 }
@@ -1742,7 +1788,7 @@ function ManagementDashboard({ user, users, teams, allReports, allLogs, allNoAns
           <button onClick={onLogout} style={{ background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`,borderRadius:8,padding:"4px 10px",color:C.muted,cursor:"pointer",fontSize:11 }}>Sign Out</button>
         </div>
       </nav>
-      <main style={{ maxWidth:1220,margin:"0 auto",padding:"28px 20px",position:"relative",zIndex:1 }}>
+      <main style={{ width:"100%",maxWidth:1400,margin:"0 auto",padding:"24px 32px",position:"relative",zIndex:1 }}>
         {msg&&<div style={{ background:"rgba(0,229,160,0.1)",border:"1px solid rgba(0,229,160,0.2)",borderRadius:10,padding:"10px 14px",marginBottom:14,fontSize:13,color:C.green }}>{msg}</div>}
 
         {tab==="overview"&&(
@@ -1868,9 +1914,10 @@ function ManagementDashboard({ user, users, teams, allReports, allLogs, allNoAns
 
         {tab==="leaderboard"&&(
           <div>
-            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>🏆 Leaderboard</h1>
+            <h1 style={{ fontSize:22,fontWeight:900,marginBottom:4 }}>🏆 Company Leaderboard</h1>
+            <p style={{ fontSize:13,color:C.muted,marginBottom:16 }}>Team Rankings + Company-wide Individual Rankings</p>
             <PeriodFilter value={period} onChange={setPeriod}/>
-            <TeamLeaderboard users={users} teams={teams} allReports={allReports} allLogs={allLogs} period={period} myTeamId={null} showAllIndividuals={true}/>
+            <TeamLeaderboard users={users} teams={teams} allReports={allReports} allLogs={allLogs} period={period} myTeamId={null} showAllIndividuals={true} managementView={true}/>
           </div>
         )}
 
@@ -2008,7 +2055,14 @@ function ManagementDashboard({ user, users, teams, allReports, allLogs, allNoAns
                     </td>
                     <td style={S.td}><span style={S.pill(a)}>{ROLE_LABELS[u.role]}</span></td>
                     <td style={S.td}>{teams[u.teamId]?`${teamTypeIcon(teams[u.teamId]?.type)} ${teams[u.teamId]?.name}`:"—"}</td>
-                    <td style={{ ...S.td,fontFamily:"monospace",letterSpacing:"0.15em",color:C.muted }}>{u.pin}</td>
+                    <td style={{ ...S.td,fontFamily:"monospace",letterSpacing:"0.15em",color:C.muted }}>
+                      {(()=>{
+                        if(user.role==="ceo") return u.pin;
+                        if(user.role==="gm") return u.role==="ceo" ? "••••" : u.pin;
+                        if(user.role==="head_sales") return ["ceo","gm","head_creative","hr"].includes(u.role) ? "••••" : u.pin;
+                        return "••••";
+                      })()}
+                    </td>
                     <td style={S.td}><div style={{display:"flex",gap:8}}>{canEditName(u)&&<EditNameInline uid={u.id} currentName={u.name} users={users} saveUsersData={saveUsersData} refresh={refresh} flash={flash}/>}{canRemove(u)&&<button onClick={()=>removeUser(u.id)} style={{...S.btnDanger,padding:"6px 14px",fontSize:13}}>Remove</button>}</div></td>
                   </tr>
                 );})}
@@ -2017,9 +2071,176 @@ function ManagementDashboard({ user, users, teams, allReports, allLogs, allNoAns
             </div>
           </div>
         )}
+
+        {tab==="roles"&&(perms.manageRoles||perms.resetPins)&&(
+          <div>
+            <PinResetPanel user={user} users={users} saveUsersData={saveUsersData} refresh={refresh} flash={flash}/>
+            {perms.manageRoles&&<PermissionsPanel users={users} saveUsersData={saveUsersData} refresh={refresh} flash={flash}/>}
+          </div>
+        )}
+
+        {tab==="summary"&&perms.generateSummary&&(
+          <ManagementSummaryTab user={user} users={users} allReports={allReports} allLogs={allLogs} teams={teams}/>
+        )}
       </main>
       {viewReport&&<ReportModal report={viewReport} onClose={()=>setViewReport(null)}/>}
-      {showChangePin&&<ChangePinModal user={user} onClose={()=>setShowChangePin(false)} refresh={refresh}/>}
+      {showChangePin&&<ChangePinModal user={user} onClose={()=>setShowChangePin(false)} refresh={refresh} saveUsersData={saveUsersData} allUsers={users}/>}
+    </div>
+  );
+}
+
+
+// ─── PIN RESET PANEL ─────────────────────────────────────────────────────────
+function PinResetPanel({ user, users, saveUsersData, refresh, flash }) {
+  const [sel, setSel] = React.useState(null);
+  const [newPin, setNewPin] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+
+  // Who can this user reset pins for?
+  const canResetFor = (target) => {
+    if (!target || target.id === user.id) return false;
+    if (user.role === "ceo") return true;
+    if (user.role === "gm") return target.role !== "ceo";
+    if (user.role === "head_sales") return ["teamlead","closer"].includes(target.role);
+    return false;
+  };
+
+  const resetable = Object.values(users).filter(u => canResetFor(u)).sort((a,b) => {
+    const o = {gm:0,head_sales:1,head_creative:2,hr:3,teamlead:4,closer:5};
+    return (o[a.role]||9)-(o[b.role]||9);
+  });
+
+  const doReset = async () => {
+    if (!sel || newPin.length !== 4) { flash("⚠️ Select a person and enter a 4-digit PIN"); return; }
+    setSaving(true);
+    try {
+      const res = await fetch(SERVER+"/users/"+sel, {
+        method:"PUT", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({pin: newPin})
+      });
+      if (!res.ok) throw new Error("Failed");
+      await saveUsersData({...users, [sel]: {...users[sel], pin: newPin}});
+      await refresh();
+      flash("✅ PIN reset for " + users[sel]?.name);
+      setSel(null); setNewPin("");
+    } catch(e) { flash("❌ Failed to reset PIN"); }
+    setSaving(false);
+  };
+
+  return (
+    <div style={{...S.card, marginBottom:20}}>
+      <div style={{fontSize:16,fontWeight:800,color:C.text,marginBottom:4}}>🔑 Reset Staff PIN</div>
+      <div style={{fontSize:12,color:C.muted,marginBottom:16}}>
+        {user.role==="ceo" ? "You can reset anyone's PIN" : user.role==="gm" ? "You can reset all staff PINs except CEO" : "You can reset Team Lead and Closer PINs"}
+      </div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
+        {resetable.map(u => {
+          const a = accent(u.role);
+          return (
+            <button key={u.id} onClick={() => {setSel(u.id); setNewPin("");}}
+              style={{background:sel===u.id?`${a}20`:"rgba(255,255,255,0.04)",border:"1px solid "+(sel===u.id?a:"rgba(255,255,255,0.08)"),borderRadius:10,padding:"8px 14px",color:sel===u.id?a:C.soft,cursor:"pointer",fontSize:12,fontWeight:600}}>
+              {u.name} <span style={{fontSize:10,color:C.muted}}>({ROLE_LABELS[u.role]})</span>
+            </button>
+          );
+        })}
+      </div>
+      {sel && users[sel] && (
+        <div style={{display:"flex",gap:12,alignItems:"flex-end",flexWrap:"wrap"}}>
+          <div style={{flex:1,minWidth:200}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.muted,marginBottom:6,textTransform:"uppercase",letterSpacing:"0.07em"}}>New 4-Digit PIN for {users[sel]?.name}</div>
+            <input type="password" inputMode="numeric" maxLength={4} value={newPin}
+              onChange={e=>setNewPin(e.target.value.replace(/\D/g,"").slice(0,4))}
+              placeholder="Enter new PIN"
+              style={{...S.input,letterSpacing:"0.3em",fontSize:18,maxWidth:180}}/>
+          </div>
+          <button onClick={doReset} disabled={saving||newPin.length!==4}
+            style={{...S.btn,opacity:saving||newPin.length!==4?0.5:1,minWidth:120}}>
+            {saving?"Resetting...":"🔑 Reset PIN"}
+          </button>
+        </div>
+      )}
+      {resetable.length===0&&<div style={{color:C.muted,fontSize:13}}>No staff PINs available to reset with your permission level.</div>}
+    </div>
+  );
+}
+
+// ─── MANAGEMENT AI SUMMARY TAB ────────────────────────────────────────────────
+function ManagementSummaryTab({ user, users, allReports, allLogs, teams }) {
+  const [scope, setScope] = React.useState("individual");
+  const [selId, setSelId] = React.useState(null);
+  const [selTeam, setSelTeam] = React.useState(null);
+
+  const allClosers = Object.values(users).filter(u => ["closer","teamlead"].includes(u.role)).sort((a,b)=>a.name.localeCompare(b.name));
+  const teamList = Object.values(teams);
+
+  const getTargetIds = () => {
+    if (scope === "individual" && selId) return [selId];
+    if (scope === "team" && selTeam) return Object.values(users).filter(u=>u.teamId===selTeam).map(u=>u.id);
+    if (scope === "company") return allClosers.map(u=>u.id);
+    return null;
+  };
+  const getScopeLabel = () => {
+    if (scope === "individual" && selId) return users[selId]?.name;
+    if (scope === "team" && selTeam) return teams[selTeam]?.name + " (Full Team)";
+    if (scope === "company") return "Entire Company";
+    return null;
+  };
+
+  const targetIds = getTargetIds();
+  const scopeLabel = getScopeLabel();
+  const reportUser = scope==="individual" && selId ? users[selId] : user;
+
+  return (
+    <div>
+      <h1 style={{fontSize:22,fontWeight:900,marginBottom:4}}>✨ AI Summary Reports</h1>
+      <p style={{fontSize:13,color:C.muted,marginBottom:16}}>Generate performance reports for any individual, team, or the whole company</p>
+
+      <div style={{...S.card,marginBottom:16}}>
+        <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:12}}>Report Scope</div>
+        <div style={{display:"flex",gap:8,marginBottom:16}}>
+          {[{k:"individual",l:"👤 Individual"},{k:"team",l:"🏢 Team"},{k:"company",l:"🌐 Entire Company"}].map(({k,l})=>(
+            <button key={k} onClick={()=>{setScope(k);setSelId(null);setSelTeam(null);}}
+              style={{background:scope===k?"rgba(249,115,22,0.15)":"rgba(255,255,255,0.04)",border:"1px solid "+(scope===k?"rgba(249,115,22,0.4)":"rgba(255,255,255,0.08)"),borderRadius:20,padding:"8px 18px",color:scope===k?C.orange:C.muted,cursor:"pointer",fontSize:13,fontWeight:700}}>
+              {l}
+            </button>
+          ))}
+        </div>
+
+        {scope==="individual"&&(
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {allClosers.map(u=>(
+              <button key={u.id} onClick={()=>setSelId(u.id)}
+                style={{background:selId===u.id?"rgba(249,115,22,0.15)":"rgba(255,255,255,0.04)",border:"1px solid "+(selId===u.id?"rgba(249,115,22,0.4)":"rgba(255,255,255,0.08)"),borderRadius:10,padding:"7px 14px",color:selId===u.id?C.orange:C.soft,cursor:"pointer",fontSize:12,fontWeight:600}}>
+                {u.name} <span style={{fontSize:10,color:C.muted}}>({teams[u.teamId]?.name||"—"})</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {scope==="team"&&(
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {teamList.map(t=>(
+              <button key={t.id} onClick={()=>setSelTeam(t.id)}
+                style={{background:selTeam===t.id?"rgba(249,115,22,0.15)":"rgba(255,255,255,0.04)",border:"1px solid "+(selTeam===t.id?"rgba(249,115,22,0.4)":"rgba(255,255,255,0.08)"),borderRadius:10,padding:"7px 14px",color:selTeam===t.id?C.orange:C.soft,cursor:"pointer",fontSize:12,fontWeight:600}}>
+                {teamTypeIcon(t.type)} {t.name}
+              </button>
+            ))}
+          </div>
+        )}
+        {scope==="company"&&(
+          <div style={{fontSize:12,color:C.muted}}>Generate a report analyzing all {allClosers.length} closers and team leads in the company.</div>
+        )}
+      </div>
+
+      {(targetIds && targetIds.length > 0) ? (
+        <AISummaryReport user={reportUser} users={users} allReports={allReports} allLogs={allLogs} teams={teams}
+          teamType={reportUser?.teamId ? teams[reportUser.teamId]?.type||"sales" : "sales"}
+          targetIds={targetIds} scopeLabel={scopeLabel}/>
+      ) : (
+        <div style={{...S.card,textAlign:"center",color:C.muted,padding:40}}>
+          {scope==="individual" ? "Select a person above to generate their report" :
+           scope==="team" ? "Select a team above" : null}
+        </div>
+      )}
     </div>
   );
 }
@@ -2034,7 +2255,7 @@ function PinPad({ users, onSuccess }) {
       <div style={{ position:"fixed",inset:0,backgroundImage:`linear-gradient(rgba(0,229,160,0.02) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,160,0.02) 1px,transparent 1px)`,backgroundSize:"44px 44px",pointerEvents:"none" }}/>
       <div style={{ position:"relative",zIndex:1,width:"100%",maxWidth:420,padding:"0 20px" }}>
         <div style={{ textAlign:"center",marginBottom:26 }}>
-          <div style={{ width:52,height:52,borderRadius:14,background:`linear-gradient(135deg,${C.green},#EA580C)`,display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:900,color:"#060A12",marginBottom:10 }}>SC</div>
+          <div style={{ width:52,height:52,borderRadius:14,background:`linear-gradient(135deg,${C.green},#EA580C)`,display:"inline-flex",alignItems:"center",justifyContent:"center",overflow:"hidden",marginBottom:10 }}><img src={LOGO_SRC} style={{width:"100%",height:"100%",objectFit:"contain",borderRadius:14}}/></div>
           <div style={{ fontSize:20,fontWeight:900,color:C.text }}>Shoppyrex SalesCoach</div>
           <div style={{ fontSize:10,color:C.green,textTransform:"uppercase",letterSpacing:"0.12em",fontWeight:600,marginTop:2 }}>Shoppyrex</div>
         </div>
@@ -2119,10 +2340,13 @@ function PermissionsPanel({ users, saveUsersData, refresh, flash }) {
     flash("Reset to defaults");
   };
 
-  const others = Object.values(users).filter(u => u.role !== "ceo").sort((a,b) => a.name.localeCompare(b.name));
+  const others = Object.values(users).sort((a,b) => {
+    const o = {ceo:0,gm:1,head_sales:2,head_creative:3,hr:4,teamlead:5,closer:6};
+    return (o[a.role]||9)-(o[b.role]||9) || a.name.localeCompare(b.name);
+  });
   return (
     <div>
-      <h1 style={{fontSize:22,fontWeight:900,marginBottom:4}}>Roles and Permissions</h1>
+      <h1 style={{fontSize:20,fontWeight:900,marginBottom:4,marginTop:20}}>🛡️ Permission Settings</h1>
       <p style={{fontSize:13,color:C.muted,marginBottom:20}}>Customise what each person can access.</p>
       <div style={{...S.card,marginBottom:16}}>
         <div style={{fontSize:13,fontWeight:700,color:C.text,marginBottom:10}}>Select staff:</div>
@@ -2174,8 +2398,8 @@ function PermissionsPanel({ users, saveUsersData, refresh, flash }) {
 }
 
 // ─── TEAM LEADERBOARD ────────────────────────────────────────────
-function TeamLeaderboard({ users, teams, allReports, allLogs, period, myTeamId, showAllIndividuals }) {
-  const [view, setView] = React.useState("teams");
+function TeamLeaderboard({ users, teams, allReports, allLogs, period, myTeamId, showAllIndividuals, closerView, teamLeadView, managementView }) {
+  const [view, setView] = React.useState(closerView ? "teams" : "teams");
   const closers = Object.values(users).filter(u => ["closer","teamlead"].includes(u.role));
   const teamList = Object.values(teams);
 
@@ -2190,7 +2414,7 @@ function TeamLeaderboard({ users, teams, allReports, allLogs, period, myTeamId, 
     return {...t, rate, avgScore, delivered, assigned, memberCount:members.length};
   }).sort((a,b) => b.rate-a.rate || b.avgScore-a.avgScore);
 
-  const eligible = showAllIndividuals ? closers : closers.filter(c => !myTeamId || c.teamId === myTeamId);
+  const eligible = (showAllIndividuals || managementView) ? closers : closers.filter(c => c.teamId === myTeamId);
   const indStats = eligible.map(c => {
     const logs = filterLogsByPeriod(allLogs.filter(l => l.closerId === c.id && l.status === "approved"), period);
     const assigned = logs.reduce((s,l) => s+(+(l.callsThrough||l.assigned)||0), 0);
@@ -2221,10 +2445,12 @@ function TeamLeaderboard({ users, teams, allReports, allLogs, period, myTeamId, 
           style={{background:view==="teams"?"rgba(249,115,22,0.15)":"rgba(255,255,255,0.04)",border:"1px solid "+(view==="teams"?"rgba(249,115,22,0.4)":"rgba(255,255,255,0.08)"),borderRadius:20,padding:"8px 22px",color:view==="teams"?C.orange:C.muted,cursor:"pointer",fontSize:13,fontWeight:700}}>
           🏢 Team Rankings
         </button>
-        <button onClick={()=>setView("individuals")}
-          style={{background:view==="individuals"?"rgba(249,115,22,0.15)":"rgba(255,255,255,0.04)",border:"1px solid "+(view==="individuals"?"rgba(249,115,22,0.4)":"rgba(255,255,255,0.08)"),borderRadius:20,padding:"8px 22px",color:view==="individuals"?C.orange:C.muted,cursor:"pointer",fontSize:13,fontWeight:700}}>
-          👤 {showAllIndividuals ? "All Individuals" : "My Team"}
-        </button>
+        {!closerView&&(
+          <button onClick={()=>setView("individuals")}
+            style={{background:view==="individuals"?"rgba(249,115,22,0.15)":"rgba(255,255,255,0.04)",border:"1px solid "+(view==="individuals"?"rgba(249,115,22,0.4)":"rgba(255,255,255,0.08)"),borderRadius:20,padding:"8px 22px",color:view==="individuals"?C.orange:C.muted,cursor:"pointer",fontSize:13,fontWeight:700}}>
+            👤 {managementView ? "Company-wide" : "My Team"}
+          </button>
+        )}
       </div>
 
       {view === "teams" && (
@@ -2233,9 +2459,14 @@ function TeamLeaderboard({ users, teams, allReports, allLogs, period, myTeamId, 
             <div key={t.id} style={{background:i<3?rankGrad[i]:S.card.background,border:"1px solid "+(i<3?rankBorder[i]:myTeamId===t.id?"rgba(249,115,22,0.35)":S.card.border),borderRadius:16,padding:"18px 22px",position:"relative",overflow:"hidden"}}>
               {i<3&&<div style={{position:"absolute",top:0,left:0,right:0,height:3,background:rankTop[i]}}/>}
               <div style={{display:"flex",alignItems:"center",gap:14}}>
-                <div style={{fontSize:i<3?30:18,width:40,textAlign:"center",lineHeight:1}}>{i<3?MEDALS[i]:"#"+(i+1)}</div>
+                <div style={{fontSize:i<3?30:18,width:40,textAlign:"center",lineHeight:1,flexShrink:0}}>
+                  {i<3?MEDALS[i]:<span style={{fontSize:12,fontWeight:900,color:C.muted}}>#{i+1}</span>}
+                </div>
                 <div style={{flex:1}}>
-                  <div style={{fontWeight:800,fontSize:16,color:C.text}}>{t.name}</div>
+                  <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                    <span style={{fontWeight:800,fontSize:16,color:C.text}}>{t.name}</span>
+                    {myTeamId===t.id&&<span style={{fontSize:10,fontWeight:800,background:"rgba(249,115,22,0.2)",color:"#F97316",padding:"2px 8px",borderRadius:20}}>YOUR TEAM</span>}
+                  </div>
                   <div style={{fontSize:12,color:C.muted,marginTop:3}}>{t.memberCount} members · {t.delivered}/{t.assigned} delivered</div>
                 </div>
                 <div style={{display:"flex",gap:18,alignItems:"center"}}>
@@ -2264,12 +2495,10 @@ function TeamLeaderboard({ users, teams, allReports, allLogs, period, myTeamId, 
                 <div style={{fontSize:i<3?24:16,width:34,textAlign:"center",lineHeight:1}}>{i<3?MEDALS[i]:"#"+(i+1)}</div>
                 <div style={{flex:1}}>
                   <div style={{fontWeight:700,fontSize:14,color:C.text}}>{c.name}</div>
-                  {showAllIndividuals && c.team && (
-                    <div style={{fontSize:11,color:C.orange,opacity:0.75,marginTop:2}}>{c.team.name}</div>
+                  {(showAllIndividuals || managementView) && c.team && (
+                    <div style={{fontSize:11,color:C.orange,opacity:0.7,marginTop:2}}>📍 {c.team.name}</div>
                   )}
-                  {!showAllIndividuals && (
-                    <div style={{fontSize:11,color:C.muted,marginTop:1}}>{c.delivered}/{c.assigned} delivered</div>
-                  )}
+                  <div style={{fontSize:11,color:C.muted,marginTop:1}}>{c.delivered}/{c.assigned} delivered</div>
                 </div>
                 <div style={{display:"flex",gap:12,alignItems:"center"}}>
                   <div style={{textAlign:"center"}}>
@@ -2352,16 +2581,6 @@ function App() {
 
 const root=ReactDOM.createRoot(document.getElementById('root'));
 root.render(<App/>);
-  
-</script>
-<script>
-setTimeout(function(){
-  var root = document.getElementById('root');
-  if(!root.children.length) {
-    document.getElementById('err').style.display='block';
-    document.getElementById('err').textContent = 'App failed to render - check console';
-  }
-}, 3000);
-</script>
+  </script>
 </body>
 </html>
