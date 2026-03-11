@@ -1964,10 +1964,42 @@ function App() {
   const [noAnswers, setNoAnswers] = useState([]);
   const [goals, setGoals] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
+  const migrateEmployeeIds = async (userMap) => {
+    const needsMigration = Object.values(userMap).filter((u) => !u.employeeId);
+    if (needsMigration.length === 0) return userMap;
+    const updated = { ...userMap };
+    const seedMap = SEED_USERS;
+    needsMigration.forEach((u) => {
+      const seed = Object.values(seedMap).find((s) => s.id === u.id || s.name === u.name);
+      if (seed && seed.employeeId) {
+        updated[u.id] = { ...u, employeeId: seed.employeeId };
+        return;
+      }
+      let empId;
+      if (u.role === "closer") {
+        const nums = Object.values(updated).filter((x) => (x.employeeId || "").startsWith("SC")).map((x) => parseInt((x.employeeId || "SC000").replace("SC", "")) || 0);
+        empId = "SC" + String((nums.length > 0 ? Math.max(...nums) : 0) + 1).padStart(3, "0");
+      } else if (u.role === "teamlead") {
+        const nums = Object.values(updated).filter((x) => (x.employeeId || "").startsWith("TL")).map((x) => parseInt((x.employeeId || "TL000").replace("TL", "")) || 0);
+        empId = "TL" + String((nums.length > 0 ? Math.max(...nums) : 0) + 1).padStart(3, "0");
+      } else {
+        const nums = Object.values(updated).filter((x) => (x.employeeId || "").startsWith("MGT")).map((x) => parseInt((x.employeeId || "MGT000").replace("MGT", "")) || 0);
+        empId = "MGT" + String((nums.length > 0 ? Math.max(...nums) : 0) + 1).padStart(3, "0");
+      }
+      updated[u.id] = { ...u, employeeId: empId };
+    });
+    try {
+      await saveUsers(updated);
+    } catch (e) {
+      console.error("migrate err", e);
+    }
+    return updated;
+  };
   const refresh = async () => {
     try {
       const [u, t, r, l, n, g] = await Promise.all([getUsers(), getTeams(), getReports(), getDailyLogs(), getNoAnswers(), getGoals()]);
-      if (u && Object.keys(u).length > 0) setUsers(u);
+      const migratedU = u && Object.keys(u).length > 0 ? await migrateEmployeeIds(u) : u;
+      if (migratedU && Object.keys(migratedU).length > 0) setUsers(migratedU);
       if (t && Object.keys(t).length > 0) setTeams(t);
       setReports(Array.isArray(r) ? r : []);
       setLogs(Array.isArray(l) ? l : []);
