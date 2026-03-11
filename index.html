@@ -28,9 +28,14 @@ window.LOGO_SRC = "data:image/png;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/4gHYSUNDX1B
 const { useState, useEffect, useRef } = React;
 const LOGO_SRC = window.LOGO_SRC;
 const SERVER = "https://salescoach-server.onrender.com";
+function fetchWithTimeout(url, opts = {}, ms = 12000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), ms);
+  return fetch(url, { ...opts, signal: controller.signal }).finally(() => clearTimeout(id));
+}
 async function apiGet(path) {
   try {
-    const r = await fetch(`${SERVER}/${path}`);
+    const r = await fetchWithTimeout(`${SERVER}/${path}`);
     return r.json();
   } catch (e) {
     console.error(e);
@@ -39,7 +44,7 @@ async function apiGet(path) {
 }
 async function apiPost(path, body) {
   try {
-    const r = await fetch(`${SERVER}/${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const r = await fetchWithTimeout(`${SERVER}/${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     return r.json();
   } catch (e) {
     console.error(e);
@@ -2013,18 +2018,26 @@ function App() {
       console.error("refresh error:", e);
     }
   };
-  useEffect(() => {
-    (async () => {
-      try {
-        await seedIfEmpty();
-        await refresh();
-      } catch (e) {
-        console.error("init error:", e);
-      }
+  const [loadError, setLoadError] = useState(false);
+  const [loadStatus, setLoadStatus] = useState("Connecting to server...");
+  const initApp = async () => {
+    setLoadError(false);
+    setReady(false);
+    setLoadStatus("Connecting to server...");
+    try {
+      await Promise.race([seedIfEmpty(), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 15000))]);
+    } catch (e) { console.warn("seed timeout:", e); }
+    setLoadStatus("Loading data...");
+    try {
+      await Promise.race([refresh(), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 15000))]);
       setReady(true);
-    })();
-  }, []);
-  if (!ready) return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "radial-gradient(ellipse 80% 60% at 50% 0%,rgba(249,115,22,0.12),transparent 60%),#07080F", display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ React.createElement("img", { src: LOGO_SRC, style: { width: 80, height: 80, objectFit: "contain", marginBottom: 20, borderRadius: 16 } }), /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "Syne,sans-serif", fontSize: 22, fontWeight: 800, color: "#F1F5FF", marginBottom: 8 } }, "Shoppyrex SalesCoach"), /* @__PURE__ */ React.createElement("div", { style: { color: "#64748B", fontSize: 14, marginBottom: 24 } }, "Connecting to server..."), /* @__PURE__ */ React.createElement("div", { style: { width: 44, height: 44, border: "3px solid rgba(249,115,22,0.2)", borderTop: "3px solid #F97316", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto" } })));
+    } catch (e) {
+      console.error("init error:", e);
+      setLoadError(true);
+    }
+  };
+  useEffect(() => { initApp(); }, []);
+  if (!ready) return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: "radial-gradient(ellipse 80% 60% at 50% 0%,rgba(249,115,22,0.12),transparent 60%),#07080F", display: "flex", alignItems: "center", justifyContent: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ React.createElement("img", { src: LOGO_SRC, style: { width: 80, height: 80, objectFit: "contain", marginBottom: 20, borderRadius: 16 } }), /* @__PURE__ */ React.createElement("div", { style: { fontFamily: "Syne,sans-serif", fontSize: 22, fontWeight: 800, color: "#F1F5FF", marginBottom: 8 } }, "Shoppyrex SalesCoach"), /* @__PURE__ */ React.createElement("div", null, loadError ? React.createElement("div", null, React.createElement("div", { style: { color: "#FF6B6B", fontSize: 14, marginBottom: 8 } }, "⚠️ Could not reach server"), React.createElement("div", { style: { color: "#64748B", fontSize: 12, marginBottom: 20 } }, "The server may be starting up. Please wait a moment and try again."), React.createElement("button", { onClick: initApp, style: { background: "linear-gradient(135deg,#F97316,#EA580C)", border: "none", borderRadius: 12, padding: "12px 28px", color: "#fff", fontWeight: 800, fontSize: 15, cursor: "pointer" } }, "🔄 Retry")) : React.createElement("div", null, React.createElement("div", { style: { color: "#64748B", fontSize: 14, marginBottom: 24 } }, loadStatus), React.createElement("div", { style: { width: 44, height: 44, border: "3px solid rgba(249,115,22,0.2)", borderTop: "3px solid #F97316", borderRadius: "50%", animation: "spin 0.8s linear infinite", margin: "0 auto" } })))));
   if (!currentUser) return /* @__PURE__ */ React.createElement(PinPad, { users, onSuccess: async (u) => {
     setReady(false);
     setCurrentUser(u);
