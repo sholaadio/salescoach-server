@@ -1750,12 +1750,16 @@ function PinPad({ users, onSuccess }) {
       setError("Please enter your Employee ID");
       return;
     }
+    const seedMatch = Object.values(SEED_USERS).find((s) => (s.employeeId || "").toUpperCase() === q);
     const found = Object.values(users).find(
-      (u) => (u.employeeId || "").toUpperCase() === q
+      (u) => (u.employeeId || "").toUpperCase() === q || seedMatch && (u.id === seedMatch.id || u.name === seedMatch.name)
     );
     if (!found) {
       setError("Employee ID not found. Check with your manager.");
       return;
+    }
+    if (!found.employeeId && seedMatch) {
+      found.employeeId = seedMatch.employeeId;
     }
     setMatched(found);
     setError("");
