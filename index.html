@@ -900,15 +900,15 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, g
   // ── Stat card
   // ── Stat card — v0 style: left border accent, bg #161618
   const StatCard = ({ label, value, sub, accentColor, icon }) =>
-    React.createElement("div", { style: { background: "#161618", border: "1px solid #26262a", borderLeft: `2px solid ${accentColor}`, borderRadius: 8, padding: "16px" }},
+    React.createElement("div", { style: { background: C.card, border: `1px solid ${C.border}`, borderLeft: `2px solid ${accentColor}`, borderRadius: 8, padding: "16px" }},
       React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }},
-        React.createElement("div", { style: { fontSize: 10, fontWeight: 500, color: "#5b5b5e", textTransform: "uppercase", letterSpacing: "0.08em" }}, label),
+        React.createElement("div", { style: { fontSize: 10, fontWeight: 500, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em" }}, label),
         icon && React.createElement("svg", { width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "#5b5b5e", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" },
           React.createElement("path", { d: icon })
         )
       ),
-      React.createElement("div", { style: { fontSize: 24, fontWeight: 600, color: "#f5f5f5", lineHeight: 1 }}, value),
-      sub && React.createElement("div", { style: { fontSize: 11, color: "#5b5b5e", marginTop: 4 }}, sub)
+      React.createElement("div", { style: { fontSize: 24, fontWeight: 600, color: C.text, lineHeight: 1 }}, value),
+      sub && React.createElement("div", { style: { fontSize: 11, color: C.muted, marginTop: 4 }}, sub)
     );
 
   // ── Period tabs — v0 style: flat buttons, active = #5e6ad2
@@ -917,7 +917,7 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, g
       [["day","Today"],["week","This Week"],["month","This Month"],["year","This Year"],["all","All Time"]].map(([v,l]) =>
         React.createElement("button", { key: v, onClick: () => setPeriod(v), style: {
           background: period===v ? "#5e6ad2" : "transparent",
-          color: period===v ? "#fff" : "#8b8b8e",
+          color: period===v ? "#fff" : C.muted,
           border: "none", borderRadius: 6,
           padding: "6px 12px", fontSize: 12, fontWeight: 500,
           cursor: "pointer", transition: "all 0.15s"
@@ -940,9 +940,9 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, g
       { tier: "Below 50%", reward: "₦0", emoji: "" },
     ];
     const rules = teamType === "followup" ? followupRules : salesRules;
-    return React.createElement("div", { style: { background: "#161618", border: "1px solid #26262a", borderRadius: 8, padding: 20 }},
+    return React.createElement("div", { style: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }},
       React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginBottom: 16 }},
-        React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#f5f5f5" }}, "Your Commission Rules"),
+        React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: C.text }}, "Your Commission Rules"),
         React.createElement("svg", { width: 14, height: 14, viewBox: "0 0 24 24", fill: "none", stroke: "#5b5b5e", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", title: "Commission based on delivery rate" },
           React.createElement("circle", { cx: 12, cy: 12, r: 10 }),
           React.createElement("line", { x1: 12, y1: 8, x2: 12, y2: 12 }),
@@ -950,24 +950,24 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, g
         )
       ),
       teamType === "socialmedia"
-        ? React.createElement("div", { style: { fontSize: 13, color: "#8b8b8e", lineHeight: 2 }},
-            React.createElement("div", null, "📱 Flat ", React.createElement("span", { style: { color: "#f5f5f5", fontWeight: 600 }}, "₦200/delivered"), " · Pool split equally among all members"),
+        ? React.createElement("div", { style: { fontSize: 13, color: C.muted, lineHeight: 2 }},
+            React.createElement("div", null, "📱 Flat ", React.createElement("span", { style: { color: C.text, fontWeight: 600 }}, "₦200/delivered"), " · Pool split equally among all members"),
             React.createElement("div", null, "✅ Upsell ₦600 · Repeat ₦300 · Referral ₦300 always active"),
             React.createElement("div", null, "👥 Mr Kelvin submits the team log")
           )
         : React.createElement("div", null,
-            teamType === "followup" && React.createElement("div", { style: { fontSize: 12, color: "#5b5b5e", marginBottom: 12 }}, "Rate = Delivered ÷ Calls Through (not total calls made)"),
+            teamType === "followup" && React.createElement("div", { style: { fontSize: 12, color: C.muted, marginBottom: 12 }}, "Rate = Delivered ÷ Calls Through (not total calls made)"),
             React.createElement("div", { style: { display: "flex", flexWrap: "wrap", columnGap: 24, rowGap: 8, marginBottom: 12 }},
               rules.map(({ tier, reward, emoji }) =>
                 React.createElement("div", { key: tier, style: { display: "flex", alignItems: "center", gap: 6, fontSize: 13 }},
                   emoji && React.createElement("span", null, emoji),
-                  React.createElement("span", { style: { color: "#8b8b8e" }}, tier),
-                  React.createElement("span", { style: { color: "#5b5b5e" }}, "→"),
-                  React.createElement("span", { style: { color: "#f5f5f5" }}, reward)
+                  React.createElement("span", { style: { color: C.muted }}, tier),
+                  React.createElement("span", { style: { color: C.muted }}, "→"),
+                  React.createElement("span", { style: { color: C.text }}, reward)
                 )
               )
             ),
-            React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 16, fontSize: 12, color: "#5b5b5e" }},
+            React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 16, fontSize: 12, color: C.muted }},
               React.createElement("span", null, "⚡ Upsell ₦600", teamType === "sales" ? " (only if delivery rate ≥50%)" : ""),
               React.createElement("span", null, "• Repeat ₦300"),
               React.createElement("span", null, "• Referral ₦300")
@@ -979,7 +979,7 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, g
   // ── Excellence pool — v0 style: indigo title, green→yellow gradient bar
   const ExcellencePool = () => {
     const qualified = monthRate >= 90;
-    return React.createElement("div", { style: { background: "#161618", border: "1px solid #26262a", borderRadius: 8, padding: 20 }},
+    return React.createElement("div", { style: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20 }},
       React.createElement("div", { style: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 4 }},
         React.createElement("div", null,
           React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, fontSize: 13, fontWeight: 600, color: "#5e6ad2", marginBottom: 6 }},
@@ -993,7 +993,7 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, g
             ),
             "Monthly Excellence Pool"
           ),
-          React.createElement("div", { style: { fontSize: 12, color: "#5b5b5e" }}, "Hit 90%+ delivery rate all month to qualify. Manager splits pool with salary.")
+          React.createElement("div", { style: { fontSize: 12, color: C.muted }}, "Hit 90%+ delivery rate all month to qualify. Manager splits pool with salary.")
         ),
         React.createElement("div", { style: { textAlign: "right", flexShrink: 0, marginLeft: 16 }},
           React.createElement("div", { style: { fontSize: 24, fontWeight: 700, color: "#f5a623" }}, monthRate + "%"),
@@ -1003,10 +1003,10 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, g
         )
       ),
       React.createElement("div", { style: { marginTop: 16 }},
-        React.createElement("div", { style: { height: 8, width: "100%", overflow: "hidden", borderRadius: 99, background: "#26262a" }},
+        React.createElement("div", { style: { height: 8, width: "100%", overflow: "hidden", borderRadius: 99, background: C.border }},
           React.createElement("div", { style: { height: "100%", width: Math.min(monthRate,100)+"%", background: "linear-gradient(to right, #10b981, #f5a623)", transition: "width 1s" }})
         ),
-        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 10, color: "#5b5b5e" }},
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 8, fontSize: 10, color: C.muted }},
           React.createElement("span", null, "0%"),
           React.createElement("span", { style: { color: "#10b981" }}, "90% Target"),
           React.createElement("span", null, "100%")
@@ -1022,16 +1022,16 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, g
     const oc = outcomeColor(r.callOutcome);
     return React.createElement("div", {
       onClick: () => setViewReport(r),
-      style: { display: "flex", alignItems: "center", gap: 14, background: "#161618", border: "1px solid #26262a", borderRadius: 8, padding: "12px 16px", cursor: "pointer", transition: "border-color 0.15s", marginBottom: 8 }
+      style: { display: "flex", alignItems: "center", gap: 14, background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: "12px 16px", cursor: "pointer", transition: "border-color 0.15s", marginBottom: 8 }
     },
       React.createElement("div", { style: { width: 44, height: 44, borderRadius: "50%", border: `2px solid ${sc}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, color: sc, flexShrink: 0 }}, score),
       React.createElement("div", { style: { flex: 1, minWidth: 0 }},
-        React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#f5f5f5", marginBottom: 2 }}, (r.product||"General") + " · " + (r.callType==="whatsapp"?"💬":"📞")),
-        React.createElement("div", { style: { fontSize: 12, color: "#5b5b5e", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}, r.analysis?.verdict||"—")
+        React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: C.text, marginBottom: 2 }}, (r.product||"General") + " · " + (r.callType==="whatsapp"?"💬":"📞")),
+        React.createElement("div", { style: { fontSize: 12, color: C.muted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}, r.analysis?.verdict||"—")
       ),
       React.createElement("div", { style: { textAlign: "right", flexShrink: 0 }},
         React.createElement("div", { style: { fontSize: 11, background: oc+"18", color: oc, borderRadius: 20, padding: "2px 10px", marginBottom: 4, fontWeight: 600 }}, outcomeLabel(r.callOutcome)),
-        React.createElement("div", { style: { fontSize: 10, color: "#4b4b4e" }}, fmtDate(r.createdAt || r.date))
+        React.createElement("div", { style: { fontSize: 10, color: C.muted }}, fmtDate(r.createdAt || r.date))
       )
     );
   };
@@ -1043,16 +1043,16 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, g
       // Header
       React.createElement("div", { style: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }},
         React.createElement("div", null,
-          React.createElement("div", { style: { fontSize: 26, fontWeight: 800, color: "#f5f5f5", marginBottom: 4 }}, greeting + ", " + firstName + " 👋"),
-          React.createElement("div", { style: { fontSize: 14, color: "#5b5b5e" }}, myTeam?.name || "—")
+          React.createElement("div", { style: { fontSize: 26, fontWeight: 800, color: C.text, marginBottom: 4 }}, greeting + ", " + firstName + " 👋"),
+          React.createElement("div", { style: { fontSize: 14, color: C.muted }}, myTeam?.name || "—")
         ),
         // Today log status badge
         React.createElement("div", null,
           !todayLog && React.createElement("a", { onClick: () => setTab("log"), style: { display: "flex", alignItems: "center", gap: 8, background: "rgba(249,115,22,0.08)", border: "1px solid rgba(249,115,22,0.25)", borderRadius: 12, padding: "8px 16px", fontSize: 13, fontWeight: 600, color: "#f97316", cursor: "pointer" }},
             "📋 Daily log pending →"
           ),
-          todayLog?.status === "pending" && React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)", borderRadius: 12, padding: "8px 16px", fontSize: 13, color: "#fbbf24" }}, "⏳ Log submitted — awaiting approval"),
-          todayLog?.status === "approved" && React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 12, padding: "8px 16px", fontSize: 13, color: "#22c55e" }}, "✅ Today's log approved")
+          todayLog?.status === "pending" && React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)", borderRadius: 12, padding: "8px 16px", fontSize: 13, color: C.yellow }}, "⏳ Log submitted — awaiting approval"),
+          todayLog?.status === "approved" && React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 12, padding: "8px 16px", fontSize: 13, color: C.green }}, "✅ Today's log approved")
         )
       ),
 
@@ -1077,10 +1077,10 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, g
       React.createElement(GoalProgress, { userId: user.id, allLogs, teams, users, goals: goals||[] }),
 
       // Performance trend chart
-      allMyReports.length >= 3 && React.createElement("div", { style: { background: "#161618", border: "1px solid #26262a", borderRadius: 8, padding: 20, marginBottom: 16 }},
-        React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#4b4b4e", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}, "📈 Performance Trend — Last 30 Days"),
+      allMyReports.length >= 3 && React.createElement("div", { style: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginBottom: 16 }},
+        React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: C.muted, textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}, "📈 Performance Trend — Last 30 Days"),
         React.createElement(TrendChart, { reports: allMyReports }),
-        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 10, color: "#4b4b4e" }},
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 10, color: C.muted }},
           React.createElement("span", null, "Older"),
           React.createElement("span", null, "Recent")
         )
@@ -1089,11 +1089,11 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, g
       // Recent calls
       React.createElement("div", null,
         React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }},
-          React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#f5f5f5" }}, "🔥 Recent Calls"),
-          React.createElement("button", { onClick: () => setTab("history"), style: { fontSize: 12, color: "#5b5b5e", background: "none", border: "none", cursor: "pointer" }}, "View all →")
+          React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.text }}, "🔥 Recent Calls"),
+          React.createElement("button", { onClick: () => setTab("history"), style: { fontSize: 12, color: C.muted, background: "none", border: "none", cursor: "pointer" }}, "View all →")
         ),
         recentCalls.length === 0
-          ? React.createElement("div", { style: { background: "#161618", border: "1px dashed #26262a", borderRadius: 8, padding: "40px", textAlign: "center", color: "#4b4b4e" }},
+          ? React.createElement("div", { style: { background: C.card, border: `1px dashed ${C.border}`, borderRadius: 8, padding: "40px", textAlign: "center", color: "#4b4b4e" }},
               React.createElement("div", { style: { fontSize: 14, marginBottom: 8 }}, "No calls uploaded yet"),
               React.createElement("button", { onClick: () => setTab("upload"), style: { fontSize: 12, color: "#5e6ad2", background: "none", border: "none", cursor: "pointer" }}, "Upload your first call →")
             )
@@ -1103,16 +1103,16 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, g
   };
 
   // ── Main layout
-  return React.createElement("div", { style: { display: "flex", minHeight: "100vh", background: "#0d0d0f", color: "#f5f5f5", fontFamily: "'DM Sans','Segoe UI',sans-serif" }},
+  return React.createElement("div", { style: { display: "flex", minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'DM Sans','Segoe UI',sans-serif" }},
 
     // ── Sidebar
-    React.createElement("aside", { style: { width: 220, flexShrink: 0, borderRight: "1px solid #26262a", background: "#111113", display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, height: "100vh", zIndex: 40 }},
+    React.createElement("aside", { style: { width: 220, flexShrink: 0, borderRight: `1px solid ${C.border}`, background: C.navBg, display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, height: "100vh", zIndex: 40 }},
 
       // Logo
-      React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "0 16px", height: 56, borderBottom: "1px solid #1f1f22" }},
+      React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "0 16px", height: 56, borderBottom: `1px solid ${C.border}` }},
         React.createElement("div", { style: { width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg,#f97316,#ea580c)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, color: "#fff" }}, "S"),
         React.createElement("div", null,
-          React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#f5f5f5" }}, "SalesCoach"),
+          React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.text }}, "SalesCoach"),
           React.createElement("div", { style: { fontSize: 10, color: "#22c55e", fontWeight: 600 }}, myTeam?.name || "Sales Closer")
         )
       ),
@@ -1127,7 +1127,7 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, g
               display: "flex", alignItems: "center", gap: 10, width: "100%",
               padding: "8px 10px", borderRadius: 8, border: "none", cursor: "pointer",
               background: tab===item.id ? "rgba(94,106,210,0.15)" : "transparent",
-              color: tab===item.id ? "#5e6ad2" : "#8b8b8e",
+              color: tab===item.id ? "#5e6ad2" : C.muted,
               fontSize: 13, fontWeight: tab===item.id ? 600 : 400,
               marginBottom: 2, textAlign: "left", transition: "all 0.1s"
             }
@@ -1141,17 +1141,18 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, g
       ),
 
       // User section
-      React.createElement("div", { style: { borderTop: "1px solid #1f1f22", padding: 8 }},
+      React.createElement("div", { style: { borderTop: `1px solid ${C.border}`, padding: 8 }},
         React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8 }},
           React.createElement("div", { style: { width: 28, height: 28, borderRadius: "50%", background: "#5e6ad2", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "#fff", flexShrink: 0 }}, initials),
           React.createElement("div", { style: { flex: 1, minWidth: 0 }},
-            React.createElement("div", { style: { fontSize: 12, fontWeight: 600, color: "#f5f5f5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}, user.name),
-            React.createElement("div", { style: { fontSize: 11, color: "#5b5b5e" }}, "Sales Closer")
+            React.createElement("div", { style: { fontSize: 12, fontWeight: 600, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}, user.name),
+            React.createElement("div", { style: { fontSize: 11, color: C.muted }}, "Sales Closer")
           )
         ),
         React.createElement("div", { style: { display: "flex", gap: 4, marginTop: 4 }},
-          React.createElement("button", { onClick: () => setShowChangePin(true), style: { flex: 1, padding: "6px 8px", background: "transparent", border: "1px solid #26262a", borderRadius: 8, color: "#8b8b8e", fontSize: 11, cursor: "pointer" }}, "🔒 PIN"),
-          React.createElement("button", { onClick: onLogout, style: { flex: 1, padding: "6px 8px", background: "transparent", border: "1px solid #26262a", borderRadius: 8, color: "#e5484d", fontSize: 11, cursor: "pointer" }}, "Sign out")
+          React.createElement("button", { onClick: () => setShowChangePin(true), style: { flex: 1, padding: "6px 8px", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 8, color: C.muted, fontSize: 11, cursor: "pointer" }}, "🔒 PIN"),
+          React.createElement(ThemeToggle, null),
+          React.createElement("button", { onClick: onLogout, style: { flex: 1, padding: "6px 8px", background: "transparent", border: `1px solid ${C.border}`, borderRadius: 8, color: C.red, fontSize: 11, cursor: "pointer" }}, "Sign out")
         )
       )
     ),
@@ -1160,13 +1161,13 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, g
     React.createElement("div", { style: { marginLeft: 220, flex: 1, display: "flex", flexDirection: "column", minHeight: "100vh" }},
 
       // Top header
-      React.createElement("header", { style: { height: 56, borderBottom: "1px solid #1f1f22", display: "flex", alignItems: "center", padding: "0 24px", background: "rgba(13,13,15,0.85)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 30 }},
+      React.createElement("header", { style: { height: 56, borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", padding: "0 24px", background: C.navBg, backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 30 }},
         React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 }},
-          React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#f5f5f5" }},
+          React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: C.text }},
             { dashboard:"Dashboard", upload:"Upload Call", log:"Daily Log", noanswer:"No Answer", history:"History", attendance:"Attendance", leaderboard:"Leaderboard", summary:"AI Summary" }[tab] || "Dashboard"
           ),
-          React.createElement("div", { style: { fontSize: 12, color: "#4b4b4e" }}, "·"),
-          React.createElement("div", { style: { fontSize: 12, color: "#5b5b5e" }},
+          React.createElement("div", { style: { fontSize: 12, color: C.muted }}, "·"),
+          React.createElement("div", { style: { fontSize: 12, color: C.muted }},
             { dashboard:"Your performance overview", upload:"Transcribe & analyze a call", log:"Submit today's log", noanswer:"Log unanswered calls", history:"All your past calls", attendance:"Your attendance record", leaderboard:"Team & company rankings", summary:"AI-powered period report" }[tab] || ""
           )
         )
@@ -1175,40 +1176,40 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, g
       // Page content
       React.createElement("main", { style: { flex: 1, padding: 24, maxWidth: 1100, width: "100%" }},
 
-        saved && React.createElement("div", { style: { background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#22c55e" }},
+        saved && React.createElement("div", { style: { background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: C.green }},
           "✅ " + (saved==="log" ? "Log submitted! " + (teamType==="socialmedia"?"Auto-approved.":"Waiting for team lead approval.") : "Logged successfully.")
         ),
 
         tab === "dashboard" && React.createElement(DashboardTab, null),
 
         tab === "upload" && React.createElement("div", null,
-          React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#f5f5f5", marginBottom: 4 }}, "🎙️ Upload a Call"),
-          React.createElement("div", { style: { fontSize: 13, color: "#5b5b5e", marginBottom: 20 }}, "Claude AI will transcribe, analyze and coach you"),
+          React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 4 }}, "🎙️ Upload a Call"),
+          React.createElement("div", { style: { fontSize: 13, color: C.muted, marginBottom: 20 }}, "Claude AI will transcribe, analyze and coach you"),
           React.createElement(CallUploadSection, { user, teams, refresh })
         ),
 
         tab === "log" && React.createElement("div", null,
-          React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#f5f5f5", marginBottom: 4 }}, "📋 Daily Log"),
+          React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 4 }}, "📋 Daily Log"),
           teamType === "socialmedia"
-            ? React.createElement("div", { style: { background: "#161618", border: "1px solid #26262a", borderRadius: 8, padding: 32, textAlign: "center", color: "#5b5b5e" }},
+            ? React.createElement("div", { style: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 32, textAlign: "center", color: C.muted }},
                 React.createElement("div", { style: { fontSize: 32, marginBottom: 12 }}, "📱"),
-                React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "#f5f5f5", marginBottom: 6 }}, "Team Log is submitted by Mr Kelvin"),
+                React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 6 }}, "Team Log is submitted by Mr Kelvin"),
                 React.createElement("div", { style: { fontSize: 12 }}, "Your commission share appears on your dashboard once submitted.")
               )
             : React.createElement("div", null, renderLogForm(),
-                myLogs.length > 1 && React.createElement("div", { style: { background: "#161618", border: "1px solid #26262a", borderRadius: 8, padding: 20, marginTop: 16 }},
-                  React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#f5f5f5", marginBottom: 14 }}, "Past Logs"),
+                myLogs.length > 1 && React.createElement("div", { style: { background: C.card, border: `1px solid ${C.border}`, borderRadius: 8, padding: 20, marginTop: 16 }},
+                  React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 14 }}, "Past Logs"),
                   React.createElement("table", { style: { width: "100%", borderCollapse: "collapse" }},
                     React.createElement("thead", null,
                       React.createElement("tr", null, ["Date", teamType==="followup"?"Calls Through":"Assigned","Delivered","Rate","Commission","Status"].map(h =>
-                        React.createElement("th", { key: h, style: { textAlign:"left", padding:"10px 14px", fontSize:11, fontWeight:700, color:"#4b4b4e", textTransform:"uppercase", letterSpacing:"0.07em", borderBottom:"1px solid #1f1f22" }}, h)
+                        React.createElement("th", { key: h, style: { textAlign:"left", padding:"10px 14px", fontSize:11, fontWeight:700, color:C.muted, textTransform:"uppercase", letterSpacing:"0.07em", borderBottom:`1px solid ${C.border}` }}, h)
                       ))
                     ),
                     React.createElement("tbody", null, myLogs.slice(1,8).map(l =>
                       React.createElement("tr", { key: l.id },
-                        React.createElement("td", { style: { padding:"12px 14px", fontSize:13, color:"#8b8b8e", borderBottom:"1px solid #141416" }}, l.date),
-                        React.createElement("td", { style: { padding:"12px 14px", fontSize:13, color:"#8b8b8e", borderBottom:"1px solid #141416" }}, l.callsThrough||l.assigned),
-                        React.createElement("td", { style: { padding:"12px 14px", fontSize:13, color:"#8b8b8e", borderBottom:"1px solid #141416" }}, l.delivered),
+                        React.createElement("td", { style: { padding:"12px 14px", fontSize:13, color:C.soft, borderBottom:`1px solid ${C.border}` }}, l.date),
+                        React.createElement("td", { style: { padding:"12px 14px", fontSize:13, color:C.soft, borderBottom:`1px solid ${C.border}` }}, l.callsThrough||l.assigned),
+                        React.createElement("td", { style: { padding:"12px 14px", fontSize:13, color:C.soft, borderBottom:`1px solid ${C.border}` }}, l.delivered),
                         React.createElement("td", { style: { padding:"12px 14px", borderBottom:"1px solid #141416" }},
                           React.createElement("span", { style: { background: tierColor(l.commission?.tier||"none")+"18", color: tierColor(l.commission?.tier||"none"), borderRadius:20, padding:"2px 10px", fontSize:12, fontWeight:700 }}, (l.commission?.rate||0)+"%")
                         ),
@@ -1226,34 +1227,34 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, g
         ),
 
         tab === "noanswer" && teamType !== "socialmedia" && React.createElement("div", null,
-          React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#f5f5f5", marginBottom: 4 }}, "📵 Log No-Answer"),
+          React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 4 }}, "📵 Log No-Answer"),
           React.createElement(NoAnswerForm, { user, onSaved: async () => { await refresh(); setSaved("noanswer"); setTimeout(() => setSaved(""), 3000); }})
         ),
 
         tab === "history" && React.createElement("div", null,
-          React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#f5f5f5", marginBottom: 16 }}, "🕐 My Call History"),
+          React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 16 }}, "🕐 My Call History"),
           React.createElement(PeriodTabs, null),
           myReports.length === 0
-            ? React.createElement("div", { style: { background: "#161618", border: "1px dashed #26262a", borderRadius: 8, padding: "48px", textAlign: "center", color: "#4b4b4e" }}, "No calls in this period.")
+            ? React.createElement("div", { style: { background: C.card, border: `1px dashed ${C.border}`, borderRadius: 8, padding: "48px", textAlign: "center", color: "#4b4b4e" }}, "No calls in this period.")
             : myReports.map(r => React.createElement(RecentCallRow, { key: r.id, r }))
         ),
 
         tab === "attendance" && React.createElement("div", null,
-          React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#f5f5f5", marginBottom: 4 }}, "📅 My Attendance"),
-          React.createElement("div", { style: { fontSize: 13, color: "#5b5b5e", marginBottom: 16 }}, "Every approved log = present day"),
+          React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 4 }}, "📅 My Attendance"),
+          React.createElement("div", { style: { fontSize: 13, color: C.muted, marginBottom: 16 }}, "Every approved log = present day"),
           React.createElement(AttendanceCalendar, { userId: user.id, allLogs, userName: user.name })
         ),
 
         tab === "leaderboard" && React.createElement("div", null,
-          React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#f5f5f5", marginBottom: 4 }}, "🏆 Leaderboard"),
-          React.createElement("div", { style: { fontSize: 13, color: "#5b5b5e", marginBottom: 16 }}, "See where your team ranks"),
+          React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 4 }}, "🏆 Leaderboard"),
+          React.createElement("div", { style: { fontSize: 13, color: C.muted, marginBottom: 16 }}, "See where your team ranks"),
           React.createElement(PeriodTabs, null),
           React.createElement(TeamLeaderboard, { users, teams, allReports, allLogs, period, myTeamId: user.teamId, showAllIndividuals: false, closerView: true })
         ),
 
         tab === "summary" && React.createElement("div", null,
-          React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#f5f5f5", marginBottom: 4 }}, "✨ AI Summary Report"),
-          React.createElement("div", { style: { fontSize: 13, color: "#5b5b5e", marginBottom: 16 }}, "AI-powered analysis of your call performance"),
+          React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: C.text, marginBottom: 4 }}, "✨ AI Summary Report"),
+          React.createElement("div", { style: { fontSize: 13, color: C.muted, marginBottom: 16 }}, "AI-powered analysis of your call performance"),
           React.createElement(AISummaryReport, { user, users, allReports, allLogs, teams, teamType })
         )
 
