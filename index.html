@@ -829,74 +829,408 @@ function CallUploadSection({ user, teams, refresh }) {
   } }, "\u2715 Remove"))) : /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, marginBottom: 10 } }, "\u{1F399}\uFE0F"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 } }, "Tap to upload your call recording"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: C.muted, lineHeight: 1.7 } }, "Supports MP3, M4A, WAV, AAC, OGG, 3GPP, AMR, WMA & more \xB7 Max 25MB", /* @__PURE__ */ React.createElement("br", null), "Whisper AI will transcribe it automatically"))), /* @__PURE__ */ React.createElement("button", { style: { ...S.btn, opacity: !audioFile || !fileOk ? 0.45 : 1, width: "100%", padding: "13px", fontSize: 14 }, onClick: submit, disabled: !audioFile || !fileOk }, "\u{1F399}\uFE0F \u2192 \u{1F916} Transcribe & Analyze Call"));
 }
 function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, goals, onLogout, refresh, saveUsersData }) {
-  const closerPerms = getPerms(user);
-  const [showChangePin, setShowChangePin] = useState(false);
-  const [showOnboarding, setShowOnboarding] = useState(() => {
-    try {
-      return !localStorage.getItem("sc_onboarded_" + user.id);
-    } catch (e) {
-      return false;
-    }
+  const [tab, setTab] = React.useState("dashboard");
+  const [period, setPeriod] = React.useState("month");
+  const [viewReport, setViewReport] = React.useState(null);
+  const [saved, setSaved] = React.useState("");
+  const [showChangePin, setShowChangePin] = React.useState(false);
+  const [showOnboarding, setShowOnboarding] = React.useState(() => {
+    try { return !localStorage.getItem("sc_onboarded_" + user.id); } catch(e) { return false; }
   });
   const closeOnboarding = () => {
-    try {
-      localStorage.setItem("sc_onboarded_" + user.id, "1");
-    } catch (e) {
-    }
+    try { localStorage.setItem("sc_onboarded_" + user.id, "1"); } catch(e) {}
     setShowOnboarding(false);
   };
-  const [tab, setTab] = useState("dashboard");
-  const [period, setPeriod] = useState("month");
-  const [viewReport, setViewReport] = useState(null);
-  const [saved, setSaved] = useState("");
+
   const myTeam = teams[user.teamId];
   const teamType = myTeam?.type || "sales";
-  const myReports = filterByPeriod(allReports.filter((r) => r.closerId === user.id), "date", period).sort((a, b) => b.date - a.date);
-  const allMyReports = allReports.filter((r) => r.closerId === user.id);
-  const myLogs = allLogs.filter((l) => l.closerId === user.id).sort((a, b) => new Date(b.date) - new Date(a.date));
-  const todayLog = myLogs.find((l) => l.date === todayStr());
-  const filteredLogs = filterLogsByPeriod(myLogs.filter((l) => l.status === "approved"), period);
+  const allMyReports = allReports.filter(r => r.closerId === user.id);
+  const myReports = filterByPeriod(allMyReports, "date", period).sort((a,b) => new Date(b.date) - new Date(a.date));
+  const myLogs = allLogs.filter(l => l.closerId === user.id).sort((a,b) => new Date(b.date) - new Date(a.date));
+  const todayLog = myLogs.find(l => l.date === todayStr());
+  const filteredLogs = filterLogsByPeriod(myLogs.filter(l => l.status === "approved"), period);
   const totalCalls = allMyReports.length;
-  const avgScore = totalCalls > 0 ? Math.round(allMyReports.reduce((s, r) => s + (r.analysis?.overallScore || 0), 0) / totalCalls) : 0;
-  const periodEarnings = teamType === "socialmedia" ? filteredLogs.reduce((s, l) => s + (l.commission?.perMember || 0), 0) : filteredLogs.reduce((s, l) => s + (l.commission?.total || 0), 0);
-  const pAssigned = filteredLogs.reduce((s, l) => s + (+(l.callsThrough || l.leadsConfirmed || l.assigned) || 0), 0);
-  const pDelivered = filteredLogs.reduce((s, l) => s + (+l.delivered || 0), 0);
+  const avgScore = totalCalls > 0 ? Math.round(allMyReports.reduce((s,r) => s + (r.analysis?.overallScore||0), 0) / totalCalls) : 0;
+  const periodEarnings = teamType === "socialmedia"
+    ? filteredLogs.reduce((s,l) => s + (l.commission?.perMember||0), 0)
+    : filteredLogs.reduce((s,l) => s + (l.commission?.total||0), 0);
+  const pAssigned = filteredLogs.reduce((s,l) => s + (+(l.callsThrough||l.leadsConfirmed||l.assigned)||0), 0);
+  const pDelivered = filteredLogs.reduce((s,l) => s + (+l.delivered||0), 0);
   const pRate = pAssigned > 0 ? Math.round(pDelivered / pAssigned * 100) : 0;
-  const canRemove = (t) => {
-    if (!t || t.id === user.id) return false;
-    if (user.role === "ceo") return true;
-    if (user.role === "gm") return t.role !== "ceo";
-    if (user.role === "head_sales") return t.role !== "ceo" && t.role !== "gm";
-    return false;
-  };
-  const canEditName = (t) => {
-    if (!t) return false;
-    return ["closer", "teamlead"].includes(t.role) && ["ceo", "gm", "head_sales"].includes(user.role);
-  };
-  const nb = (id, lbl) => /* @__PURE__ */ React.createElement("button", { onClick: () => setTab(id), style: { background: tab === id ? "rgba(249,115,22,0.15)" : "transparent", color: tab === id ? "#F97316" : "rgba(255,255,255,0.45)", border: tab === id ? "1px solid rgba(249,115,22,0.35)" : "1px solid transparent", borderRadius: 20, padding: "6px 14px", fontSize: 12, fontWeight: tab === id ? 700 : 500, cursor: "pointer", whiteSpace: "nowrap", transition: "all 0.15s", letterSpacing: tab === id ? "0" : "0" } }, lbl);
+
+  // Month rate for excellence pool
+  const now = new Date();
+  const monthLogs = myLogs.filter(l => {
+    if (l.status !== "approved") return false;
+    const d = new Date(l.date);
+    return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+  });
+  const mAssigned = monthLogs.reduce((s,l) => s + (+(l.callsThrough||l.leadsConfirmed||l.assigned)||0), 0);
+  const mDelivered = monthLogs.reduce((s,l) => s + (+l.delivered||0), 0);
+  const monthRate = mAssigned > 0 ? Math.round(mDelivered / mAssigned * 100) : 0;
+
   const renderLogForm = () => {
-    if (teamType === "followup") return /* @__PURE__ */ React.createElement(FollowupDailyLogForm, { user, existingLog: todayLog, onSaved: async () => {
-      await refresh();
-      setSaved("log");
-      setTimeout(() => setSaved(""), 3e3);
-    } });
-    return /* @__PURE__ */ React.createElement(SalesDailyLogForm, { user, existingLog: todayLog, onSaved: async () => {
-      await refresh();
-      setSaved("log");
-      setTimeout(() => setSaved(""), 3e3);
-    } });
+    if (teamType === "followup") return React.createElement(FollowupDailyLogForm, { user, existingLog: todayLog, onSaved: async () => { await refresh(); setSaved("log"); setTimeout(() => setSaved(""), 3000); }});
+    return React.createElement(SalesDailyLogForm, { user, existingLog: todayLog, onSaved: async () => { await refresh(); setSaved("log"); setTimeout(() => setSaved(""), 3000); }});
   };
-  return /* @__PURE__ */ React.createElement("div", { style: { minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'DM Sans','Segoe UI',sans-serif" } }, /* @__PURE__ */ React.createElement("div", { style: { position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none", backgroundImage: `linear-gradient(rgba(0,229,160,0.015) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,160,0.015) 1px,transparent 1px)`, backgroundSize: "44px 44px" } }), /* @__PURE__ */ React.createElement("nav", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0 20px", height: 64, background: "rgba(6,10,18,0.98)", borderBottom: "1px solid rgba(255,255,255,0.07)", position: "sticky", top: 0, zIndex: 100, backdropFilter: "blur(20px)", boxShadow: "0 4px 24px rgba(0,0,0,0.4)" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 9 } }, /* @__PURE__ */ React.createElement("div", { style: { width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg,#F97316,#EA580C)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden", boxShadow: "0 0 16px rgba(249,115,22,0.3)" } }, /* @__PURE__ */ React.createElement("img", { src: LOGO_SRC, style: { width: "100%", height: "100%", objectFit: "contain", borderRadius: 8 } })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 800 } }, "Shoppyrex SalesCoach"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: C.green, textTransform: "uppercase", letterSpacing: "0.1em", fontWeight: 600 } }, teamTypeIcon(teamType), " ", myTeam?.name))), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 4, overflowX: "auto", scrollbarWidth: "none" } }, nb("dashboard", "\u{1F4CA} Dashboard"), nb("upload", "\u{1F399}\uFE0F Upload Call"), nb("log", "\u{1F4CB} Daily Log"), teamType !== "socialmedia" && nb("noanswer", "\u{1F4F5} No Answer"), nb("history", "\u{1F550} History"), nb("attendance", "\u{1F4C5} Attendance"), nb("leaderboard", "\u{1F3C6} Leaderboard"), nb("summary", "\u2728 AI Summary")), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10 } }, /* @__PURE__ */ React.createElement("div", { style: { textAlign: "right" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700 } }, user.name), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 9, color: C.muted } }, "Sales Closer")), /* @__PURE__ */ React.createElement(ThemeToggle, null), /* @__PURE__ */ React.createElement("button", { onClick: () => setShowChangePin(true), style: { background: "rgba(249,115,22,0.1)", border: "1px solid rgba(249,115,22,0.3)", borderRadius: 8, padding: "4px 10px", color: "#F97316", cursor: "pointer", fontSize: 11 } }, "\u{1F512} PIN"), /* @__PURE__ */ React.createElement("button", { onClick: onLogout, style: { background: "rgba(255,255,255,0.05)", border: `1px solid ${C.border}`, borderRadius: 8, padding: "4px 10px", color: C.muted, cursor: "pointer", fontSize: 11 } }, "Sign Out"))), /* @__PURE__ */ React.createElement("main", { style: { width: "100%", maxWidth: 1400, margin: "0 auto", padding: "24px 32px", position: "relative", zIndex: 1 } }, tab === "dashboard" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 900, marginBottom: 4 } }, "Hey ", user.name.split(" ")[0], " \u{1F44B}"), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: C.muted, marginBottom: 16 } }, teamTypeIcon(teamType), " ", myTeam?.name), /* @__PURE__ */ React.createElement(PerformanceWarning, { logs: allLogs, userId: user.id }), /* @__PURE__ */ React.createElement(GoalProgress, { userId: user.id, allLogs, teams, users, goals: goals || [] }), /* @__PURE__ */ React.createElement(PeriodFilter, { value: period, onChange: setPeriod }), todayLog && /* @__PURE__ */ React.createElement(CommissionCard, { comm: todayLog.commission, label: "Today's Commission" }), allMyReports.length >= 3 && /* @__PURE__ */ React.createElement("div", { style: { ...S.card, marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: C.muted, marginBottom: 8 } }, "\u{1F4C8} PERFORMANCE TREND \u2014 LAST 30 DAYS"), /* @__PURE__ */ React.createElement(TrendChart, { reports: allMyReports }), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 10, color: C.muted } }, /* @__PURE__ */ React.createElement("span", null, "Older"), /* @__PURE__ */ React.createElement("span", null, "Recent"))), /* @__PURE__ */ React.createElement("div", { style: { ...S.g4, marginBottom: 20 } }, [
-    { l: "Total Calls", v: totalCalls, c: C.green },
-    { l: "Avg AI Score", v: avgScore || "\u2014", c: scoreColor(avgScore) },
-    { l: "Period Earnings", v: fmtNaira(periodEarnings), c: C.yellow, sub: teamType === "socialmedia" ? "Your share of team pool" : "Paid with salary" },
-    { l: teamType === "followup" ? "Calls Through Rate" : "Delivery Rate", v: `${pRate}%`, c: pRate >= 90 ? C.green : pRate >= 50 ? C.yellow : C.red }
-  ].map((s, i) => /* @__PURE__ */ React.createElement("div", { key: i, style: { ...S.card, position: "relative", overflow: "hidden", marginBottom: 0 } }, /* @__PURE__ */ React.createElement("div", { style: S.accentTop(s.c) }), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: C.muted, textTransform: "uppercase", letterSpacing: "0.06em", fontWeight: 700 } }, s.l), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 26, fontWeight: 900, marginTop: 6 } }, s.v), s.sub && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: C.muted, marginTop: 2 } }, s.sub)))), /* @__PURE__ */ React.createElement("div", { style: { ...S.card, background: "rgba(0,0,0,0.2)", marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 8 } }, "\u{1F4B0} Your Commission Rules"), teamType === "followup" && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C.muted, lineHeight: 1.8 } }, "\u{1F504} Rate = Delivered \xF7 Calls Through (not total calls made)", /* @__PURE__ */ React.createElement("br", null), "\u{1F947} 90%+ \u2192 \u20A6200/order \xB7 \u{1F948} 65\u201389% \u2192 \u20A6150 \xB7 \u{1F949} 50\u201364% \u2192 \u20A6100 \xB7 Below 50% \u2192 \u20A60 base", /* @__PURE__ */ React.createElement("br", null), "\u2705 Upsell \u20A6600 always active \xB7 Repeat \u20A6300 \xB7 Referral \u20A6300 (no restrictions)"), teamType === "socialmedia" && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C.muted, lineHeight: 1.8 } }, "\u{1F4F1} Rate = Delivered \xF7 Leads Confirmed \xB7 Flat \u20A6200/delivered order", /* @__PURE__ */ React.createElement("br", null), "\u2705 Upsell \u20A6600 always active \xB7 Repeat \u20A6300 \xB7 Referral \u20A6300", /* @__PURE__ */ React.createElement("br", null), "\u{1F465} All amounts split equally among all team members \xB7 Mr Kelvin submits team log"), teamType === "sales" && /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C.muted, lineHeight: 1.8 } }, "\u{1F947} 90%+ \u2192 \u20A6200/delivered \xB7 \u{1F948} 65\u201389% \u2192 \u20A6150 \xB7 \u{1F949} 50\u201364% \u2192 \u20A6100 \xB7 Below 50% \u2192 \u20A60", /* @__PURE__ */ React.createElement("br", null), "\u26A1 Upsell \u20A6600 (only if delivery rate \u226550%) \xB7 Repeat \u20A6300 \xB7 Referral \u20A6300")), teamType !== "socialmedia" && /* @__PURE__ */ React.createElement("div", { style: { ...S.card, background: "rgba(255,182,39,0.04)", border: "1px solid rgba(255,182,39,0.15)" } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 10 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.yellow, marginBottom: 3 } }, "\u{1F3C6} Monthly Excellence Pool"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: C.muted } }, "Hit 90%+ delivery rate all month to qualify. Manager splits pool with salary.")), /* @__PURE__ */ React.createElement("div", { style: { textAlign: "center" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, fontWeight: 900, color: pRate >= 90 ? C.green : C.yellow } }, pRate, "%"), /* @__PURE__ */ React.createElement("span", { style: S.pill(pRate >= 90 ? C.green : C.yellow) }, pRate >= 90 ? "\u2705 Qualified!" : "Need 90%+"))), /* @__PURE__ */ React.createElement("div", { style: { marginTop: 12, height: 8, background: "rgba(255,255,255,0.06)", borderRadius: 999 } }, /* @__PURE__ */ React.createElement("div", { style: { width: `${Math.min(pRate, 100)}%`, height: "100%", background: pRate >= 90 ? `linear-gradient(90deg,${C.green},#EA580C)` : `linear-gradient(90deg,${C.yellow},#E09000)`, borderRadius: 999, transition: "width 1s" } })))), tab === "upload" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 900, marginBottom: 4 } }, "\u{1F399}\uFE0F Upload a Call"), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: C.muted, marginBottom: 20 } }, "Paste your transcript \u2014 Claude AI will coach you and recommend learning resources"), /* @__PURE__ */ React.createElement(CallUploadSection, { user, teams, refresh })), tab === "log" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 900, marginBottom: 4 } }, "\u{1F4CB} Daily Log"), saved === "log" && /* @__PURE__ */ React.createElement("div", { style: { background: "rgba(0,229,160,0.1)", border: "1px solid rgba(0,229,160,0.2)", borderRadius: 10, padding: "10px 14px", marginBottom: 14, fontSize: 13, color: C.green } }, "\u2705 Log submitted! ", teamType === "socialmedia" ? "Auto-approved." : "Waiting for team lead approval."), teamType === "socialmedia" ? /* @__PURE__ */ React.createElement("div", { style: { ...S.card, textAlign: "center", padding: "30px 20px", color: C.muted } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 28, marginBottom: 10 } }, "\u{1F4F1}"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 6 } }, "Team Log is submitted by Mr Kelvin"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12 } }, "As a Social Media Team member, your commission share will appear on your dashboard once the team lead submits the daily log.")) : renderLogForm(), myLogs.length > 1 && teamType !== "socialmedia" && /* @__PURE__ */ React.createElement("div", { style: S.card }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, marginBottom: 12 } }, "Past Logs"), /* @__PURE__ */ React.createElement("table", { style: { width: "100%", borderCollapse: "collapse" } }, /* @__PURE__ */ React.createElement("thead", null, /* @__PURE__ */ React.createElement("tr", null, ["Date", teamType === "followup" ? "Calls Through" : "Assigned", "Delivered", "Rate", "Commission", "Status"].map((h) => /* @__PURE__ */ React.createElement("th", { key: h, style: S.th }, h)))), /* @__PURE__ */ React.createElement("tbody", null, myLogs.slice(1, 8).map((l) => /* @__PURE__ */ React.createElement("tr", { key: l.id }, /* @__PURE__ */ React.createElement("td", { style: S.td }, l.date), /* @__PURE__ */ React.createElement("td", { style: S.td }, l.callsThrough || l.assigned), /* @__PURE__ */ React.createElement("td", { style: S.td }, l.delivered), /* @__PURE__ */ React.createElement("td", { style: S.td }, /* @__PURE__ */ React.createElement("span", { style: S.pill(tierColor(l.commission?.tier || "none")) }, l.commission?.rate || 0, "%")), /* @__PURE__ */ React.createElement("td", { style: { ...S.td, fontWeight: 700, color: tierColor(l.commission?.tier || "none") } }, fmtNaira(l.commission?.total || 0)), /* @__PURE__ */ React.createElement("td", { style: S.td }, /* @__PURE__ */ React.createElement("span", { style: S.pill(l.status === "approved" ? C.green : l.status === "rejected" ? C.red : C.yellow) }, l.status === "approved" ? "\u2705" : l.status === "rejected" ? "\u274C" : "\u23F3")))))))), tab === "noanswer" && teamType !== "socialmedia" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 900, marginBottom: 4 } }, "\u{1F4F5} Log No-Answer"), saved === "noanswer" && /* @__PURE__ */ React.createElement("div", { style: { background: "rgba(0,229,160,0.1)", border: "1px solid rgba(0,229,160,0.2)", borderRadius: 10, padding: "10px 14px", marginBottom: 14, fontSize: 13, color: C.green } }, "\u2705 Logged."), /* @__PURE__ */ React.createElement(NoAnswerForm, { user, onSaved: async () => {
-    await refresh();
-    setSaved("noanswer");
-    setTimeout(() => setSaved(""), 3e3);
-  } })), tab === "history" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 900, marginBottom: 4 } }, "\u{1F550} My Call History"), /* @__PURE__ */ React.createElement(PeriodFilter, { value: period, onChange: setPeriod }), myReports.length === 0 ? /* @__PURE__ */ React.createElement("div", { style: { ...S.card, textAlign: "center", padding: "40px", color: C.muted } }, "No calls in this period.") : myReports.map((r) => /* @__PURE__ */ React.createElement("div", { key: r.id, style: { ...S.card, cursor: "pointer", position: "relative", overflow: "hidden" }, onClick: () => setViewReport(r) }, /* @__PURE__ */ React.createElement("div", { style: S.accentTop(scoreColor(r.analysis?.overallScore || 0)) }), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontWeight: 700, color: C.text, marginBottom: 2 } }, r.product || "General", " \xB7 ", r.callType === "whatsapp" ? "\u{1F4AC}" : "\u{1F4DE}"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: C.muted } }, fmtDate(r.date)), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, color: "#8A9BB5", marginTop: 3, maxWidth: 480 } }, r.analysis?.verdict)), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } }, /* @__PURE__ */ React.createElement("span", { style: S.pill(scoreColor(r.analysis?.overallScore || 0)) }, r.analysis?.overallScore || "\u2014", "/100"), /* @__PURE__ */ React.createElement("span", { style: S.pill(outcomeColor(r.callOutcome)) }, outcomeLabel(r.callOutcome)), r.analysis?.resources && /* @__PURE__ */ React.createElement("span", { style: S.pill(C.blue) }, "\u{1F4DA}")))))), tab === "attendance" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 900, marginBottom: 4 } }, "\u{1F4C5} My Attendance"), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: C.muted, marginBottom: 16 } }, "Your log submission history \u2014 every approved log = present day"), /* @__PURE__ */ React.createElement(AttendanceCalendar, { userId: user.id, allLogs, userName: user.name })), tab === "leaderboard" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 900, marginBottom: 4 } }, "\u{1F3C6} Leaderboard"), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: C.muted, marginBottom: 16 } }, "See how all teams are doing & where your team ranks"), /* @__PURE__ */ React.createElement(PeriodFilter, { value: period, onChange: setPeriod }), /* @__PURE__ */ React.createElement(TeamLeaderboard, { users, teams, allReports, allLogs, period, myTeamId: user.teamId, showAllIndividuals: false, closerView: true })), tab === "summary" && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 900, marginBottom: 4 } }, "\u2728 AI Summary Report"), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: C.muted, marginBottom: 16 } }, "AI-powered analysis of your call performance"), /* @__PURE__ */ React.createElement(AISummaryReport, { user, users, allReports, allLogs, teams, teamType }))), viewReport && /* @__PURE__ */ React.createElement(ReportModal, { report: viewReport, onClose: () => setViewReport(null) }), showChangePin && /* @__PURE__ */ React.createElement(ChangePinModal, { user, onClose: () => setShowChangePin(false), refresh, saveUsersData, allUsers: users }), showOnboarding && /* @__PURE__ */ React.createElement(OnboardingModal, { user, onClose: closeOnboarding }));
+
+  // ── Sidebar nav items
+  const navItems = [
+    { id: "dashboard", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6", label: "Dashboard" },
+    { id: "upload", icon: "M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z", label: "Upload Call" },
+    { id: "log", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2", label: "Daily Log" },
+    ...(teamType !== "socialmedia" ? [{ id: "noanswer", icon: "M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636", label: "No Answer" }] : []),
+    { id: "history", icon: "M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z", label: "History" },
+    { id: "attendance", icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z", label: "Attendance" },
+    { id: "leaderboard", icon: "M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z", label: "Leaderboard" },
+    { id: "summary", icon: "M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z", label: "AI Summary" },
+  ];
+
+  const initials = user.name.split(" ").map(n => n[0]).join("").slice(0,2).toUpperCase();
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const firstName = user.name.split(" ").pop();
+
+  // ── Inline SVG icon helper
+  const Icon = ({ path, size=16, color="currentColor" }) =>
+    React.createElement("svg", { width: size, height: size, viewBox: "0 0 24 24", fill: "none", stroke: color, strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round" },
+      React.createElement("path", { d: path })
+    );
+
+  // ── Stat card
+  const StatCard = ({ label, value, sub, accentColor }) =>
+    React.createElement("div", { style: { background: "#0f0f10", border: "1px solid #1f1f22", borderRadius: 16, padding: "20px", position: "relative", overflow: "hidden" }},
+      React.createElement("div", { style: { position: "absolute", top: 0, left: 0, right: 0, height: 2, background: accentColor }}),
+      React.createElement("div", { style: { fontSize: 10, fontWeight: 700, color: "#4b4b4e", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 10 }}, label),
+      React.createElement("div", { style: { fontSize: 28, fontWeight: 800, color: "#f5f5f5", lineHeight: 1 }}, value),
+      sub && React.createElement("div", { style: { fontSize: 11, color: "#4b4b4e", marginTop: 6 }}, sub)
+    );
+
+  // ── Period tabs
+  const PeriodTabs = () =>
+    React.createElement("div", { style: { display: "flex", gap: 2, background: "#0f0f10", border: "1px solid #1f1f22", borderRadius: 12, padding: 4, marginBottom: 20, width: "fit-content" }},
+      [["day","Today"],["week","This Week"],["month","This Month"],["year","This Year"],["all","All Time"]].map(([v,l]) =>
+        React.createElement("button", { key: v, onClick: () => setPeriod(v), style: { background: period===v ? "#5e6ad2" : "transparent", color: period===v ? "#fff" : "#5b5b5e", border: "none", borderRadius: 8, padding: "6px 14px", fontSize: 12, fontWeight: 600, cursor: "pointer", transition: "all 0.15s" }}, l)
+      )
+    );
+
+  // ── Commission rules card
+  const CommRules = () =>
+    React.createElement("div", { style: { background: "#0f0f10", border: "1px solid #1f1f22", borderRadius: 16, padding: 20 }},
+      React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#f5f5f5", marginBottom: 14, display: "flex", alignItems: "center", gap: 8 }},
+        React.createElement("span", null, "\uD83D\uDCB0"), "Your Commission Rules"
+      ),
+      teamType === "sales" && React.createElement("div", null,
+        React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }},
+          [["🥇 90%+","₦200/delivered","#f5a623"],["🥈 65–89%","₦150","#9ca3af"],["🥉 50–64%","₦100","#cd7c2f"],["Below 50%","₦0","#4b5563"]].map(([tier,rate,color]) =>
+            React.createElement("div", { key: tier, style: { background: color+"12", border: `1px solid ${color}28`, borderRadius: 8, padding: "6px 12px" }},
+              React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color }}, tier),
+              React.createElement("span", { style: { fontSize: 12, color: "#5b5b5e", marginLeft: 6 }}, "→ " + rate)
+            )
+          )
+        ),
+        React.createElement("div", { style: { fontSize: 12, color: "#5b5b5e" }},
+          "⚡ Upsell ", React.createElement("strong", { style: { color: "#f5f5f5" }}, "₦600"), " (only if rate ≥50%)  ·  Repeat ", React.createElement("strong", { style: { color: "#f5f5f5" }}, "₦300"), "  ·  Referral ", React.createElement("strong", { style: { color: "#f5f5f5" }}, "₦300")
+        )
+      ),
+      teamType === "followup" && React.createElement("div", null,
+        React.createElement("div", { style: { fontSize: 12, color: "#5b5b5e", marginBottom: 10 }}, "Rate = Delivered ÷ Calls Through (not total calls made)"),
+        React.createElement("div", { style: { display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }},
+          [["🥇 90%+","₦200/order","#f5a623"],["🥈 65–89%","₦150","#9ca3af"],["🥉 50–64%","₦100","#cd7c2f"],["Below 50%","₦0","#4b5563"]].map(([tier,rate,color]) =>
+            React.createElement("div", { key: tier, style: { background: color+"12", border: `1px solid ${color}28`, borderRadius: 8, padding: "6px 12px" }},
+              React.createElement("span", { style: { fontSize: 12, fontWeight: 700, color }}, tier),
+              React.createElement("span", { style: { fontSize: 12, color: "#5b5b5e", marginLeft: 6 }}, "→ " + rate)
+            )
+          )
+        ),
+        React.createElement("div", { style: { fontSize: 12, color: "#5b5b5e" }}, "✅ Upsell ₦600 always active  ·  Repeat ₦300  ·  Referral ₦300")
+      ),
+      teamType === "socialmedia" && React.createElement("div", { style: { fontSize: 12, color: "#5b5b5e", lineHeight: 1.8 }},
+        React.createElement("div", null, "📱 Flat ", React.createElement("strong", { style: { color: "#f5f5f5" }}, "₦200/delivered"), " · Pool split equally among all members"),
+        React.createElement("div", null, "✅ Upsell ₦600 · Repeat ₦300 · Referral ₦300 always active"),
+        React.createElement("div", null, "👥 Mr Kelvin submits the team log")
+      )
+    );
+
+  // ── Excellence pool card
+  const ExcellencePool = () => {
+    const qualified = monthRate >= 90;
+    return React.createElement("div", { style: { background: qualified ? "#f5a62308" : "#0f0f10", border: `1px solid ${qualified ? "#f5a62330" : "#1f1f22"}`, borderRadius: 16, padding: 20 }},
+      React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }},
+        React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#f5f5f5", display: "flex", alignItems: "center", gap: 8 }}, "🏆 Monthly Excellence Pool"),
+          React.createElement("div", { style: { fontSize: 12, color: "#5b5b5e", marginTop: 4 }}, "Hit 90%+ delivery rate all month to qualify. Manager splits pool with salary.")
+        ),
+        React.createElement("div", { style: { textAlign: "right" }},
+          React.createElement("div", { style: { fontSize: 28, fontWeight: 800, color: qualified ? "#22c55e" : "#f5a623" }}, monthRate + "%"),
+          React.createElement("div", { style: { fontSize: 11, background: (qualified?"#22c55e":"#f5a623")+"18", color: qualified?"#22c55e":"#f5a623", borderRadius: 20, padding: "2px 10px", marginTop: 4 }}, qualified ? "✅ Qualified!" : "Need 90%+")
+        )
+      ),
+      React.createElement("div", { style: { position: "relative", marginTop: 16 }},
+        React.createElement("div", { style: { height: 8, background: "#1a1a1c", borderRadius: 99, overflow: "hidden" }},
+          React.createElement("div", { style: { height: "100%", width: Math.min(monthRate,100)+"%", background: qualified ? "linear-gradient(90deg,#22c55e,#16a34a)" : "linear-gradient(90deg,#f5a623,#d97706)", borderRadius: 99, transition: "width 1s" }})
+        ),
+        React.createElement("div", { style: { position: "absolute", top: 0, left: "90%", height: 8, width: 1, background: "#4b5563" }}),
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 10, color: "#4b4b4e" }},
+          React.createElement("span", null, "0%"),
+          React.createElement("span", { style: { position: "absolute", left: "90%", transform: "translateX(-50%)" }}, "90% Target"),
+          React.createElement("span", null, "100%")
+        )
+      )
+    );
+  };
+
+  // ── Recent call row
+  const RecentCallRow = ({ r }) => {
+    const score = r.analysis?.overallScore || 0;
+    const sc = scoreColor(score);
+    const oc = outcomeColor(r.callOutcome);
+    return React.createElement("div", {
+      onClick: () => setViewReport(r),
+      style: { display: "flex", alignItems: "center", gap: 14, background: "#0f0f10", border: "1px solid #1f1f22", borderRadius: 12, padding: "12px 16px", cursor: "pointer", transition: "border-color 0.15s", marginBottom: 8 }
+    },
+      React.createElement("div", { style: { width: 44, height: 44, borderRadius: "50%", border: `2px solid ${sc}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, color: sc, flexShrink: 0 }}, score),
+      React.createElement("div", { style: { flex: 1, minWidth: 0 }},
+        React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#f5f5f5", marginBottom: 2 }}, (r.product||"General") + " · " + (r.callType==="whatsapp"?"💬":"📞")),
+        React.createElement("div", { style: { fontSize: 12, color: "#5b5b5e", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}, r.analysis?.verdict||"—")
+      ),
+      React.createElement("div", { style: { textAlign: "right", flexShrink: 0 }},
+        React.createElement("div", { style: { fontSize: 11, background: oc+"18", color: oc, borderRadius: 20, padding: "2px 10px", marginBottom: 4, fontWeight: 600 }}, outcomeLabel(r.callOutcome)),
+        React.createElement("div", { style: { fontSize: 10, color: "#4b4b4e" }}, fmtDate(r.createdAt || r.date))
+      )
+    );
+  };
+
+  // ── Dashboard tab content
+  const DashboardTab = () => {
+    const recentCalls = [...allMyReports].sort((a,b) => new Date(b.createdAt||b.date) - new Date(a.createdAt||a.date)).slice(0,5);
+    return React.createElement("div", null,
+      // Header
+      React.createElement("div", { style: { display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 24, flexWrap: "wrap", gap: 12 }},
+        React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 26, fontWeight: 800, color: "#f5f5f5", marginBottom: 4 }}, greeting + ", " + firstName + " 👋"),
+          React.createElement("div", { style: { fontSize: 14, color: "#5b5b5e" }}, myTeam?.name || "—")
+        ),
+        // Today log status badge
+        React.createElement("div", null,
+          !todayLog && React.createElement("a", { onClick: () => setTab("log"), style: { display: "flex", alignItems: "center", gap: 8, background: "rgba(249,115,22,0.08)", border: "1px solid rgba(249,115,22,0.25)", borderRadius: 12, padding: "8px 16px", fontSize: 13, fontWeight: 600, color: "#f97316", cursor: "pointer" }},
+            "📋 Daily log pending →"
+          ),
+          todayLog?.status === "pending" && React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.2)", borderRadius: 12, padding: "8px 16px", fontSize: 13, color: "#fbbf24" }}, "⏳ Log submitted — awaiting approval"),
+          todayLog?.status === "approved" && React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 12, padding: "8px 16px", fontSize: 13, color: "#22c55e" }}, "✅ Today's log approved")
+        )
+      ),
+
+      // Period tabs
+      React.createElement(PeriodTabs, null),
+
+      // Stats
+      React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 12, marginBottom: 20 }},
+        React.createElement(StatCard, { label: "Total Calls", value: totalCalls, sub: "Analyzed by AI", accentColor: "#5e6ad2" }),
+        React.createElement(StatCard, { label: "Avg AI Score", value: totalCalls > 0 ? avgScore + "/100" : "—", sub: totalCalls > 0 ? (avgScore>=80?"Excellent":avgScore>=60?"Good":"Needs work") : "Upload a call", accentColor: scoreColor(avgScore) }),
+        React.createElement(StatCard, { label: "Period Earnings", value: fmtNaira(periodEarnings), sub: teamType==="socialmedia"?"Your share of pool":"Paid with salary", accentColor: "#f97316" }),
+        React.createElement(StatCard, { label: teamType==="followup"?"Calls Through Rate":"Delivery Rate", value: pAssigned > 0 ? pRate+"%" : "—", sub: pAssigned > 0 ? pDelivered+" of "+pAssigned+" delivered" : "No logs yet", accentColor: pRate>=90?"#22c55e":pRate>=50?"#f5a623":"#ef4444" })
+      ),
+
+      // Commission rules + Excellence pool
+      React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 20 }},
+        React.createElement(CommRules, null),
+        teamType !== "socialmedia" && React.createElement(ExcellencePool, null)
+      ),
+
+      // Goal progress
+      React.createElement(GoalProgress, { userId: user.id, allLogs, teams, users, goals: goals||[] }),
+
+      // Performance trend chart
+      allMyReports.length >= 3 && React.createElement("div", { style: { background: "#0f0f10", border: "1px solid #1f1f22", borderRadius: 16, padding: 20, marginBottom: 16 }},
+        React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: "#4b4b4e", textTransform: "uppercase", letterSpacing: "0.1em", marginBottom: 12 }}, "📈 Performance Trend — Last 30 Days"),
+        React.createElement(TrendChart, { reports: allMyReports }),
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 6, fontSize: 10, color: "#4b4b4e" }},
+          React.createElement("span", null, "Older"),
+          React.createElement("span", null, "Recent")
+        )
+      ),
+
+      // Recent calls
+      React.createElement("div", null,
+        React.createElement("div", { style: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }},
+          React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#f5f5f5" }}, "🔥 Recent Calls"),
+          React.createElement("button", { onClick: () => setTab("history"), style: { fontSize: 12, color: "#5b5b5e", background: "none", border: "none", cursor: "pointer" }}, "View all →")
+        ),
+        recentCalls.length === 0
+          ? React.createElement("div", { style: { background: "#0f0f10", border: "1px dashed #1f1f22", borderRadius: 16, padding: "40px", textAlign: "center", color: "#4b4b4e" }},
+              React.createElement("div", { style: { fontSize: 14, marginBottom: 8 }}, "No calls uploaded yet"),
+              React.createElement("button", { onClick: () => setTab("upload"), style: { fontSize: 12, color: "#5e6ad2", background: "none", border: "none", cursor: "pointer" }}, "Upload your first call →")
+            )
+          : recentCalls.map(r => React.createElement(RecentCallRow, { key: r.id, r }))
+      )
+    );
+  };
+
+  // ── Main layout
+  return React.createElement("div", { style: { display: "flex", minHeight: "100vh", background: "#0a0a0b", color: "#f5f5f5", fontFamily: "'DM Sans','Segoe UI',sans-serif" }},
+
+    // ── Sidebar
+    React.createElement("aside", { style: { width: 220, flexShrink: 0, borderRight: "1px solid #1f1f22", background: "#0f0f10", display: "flex", flexDirection: "column", position: "fixed", top: 0, left: 0, height: "100vh", zIndex: 40 }},
+
+      // Logo
+      React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "0 16px", height: 56, borderBottom: "1px solid #1f1f22" }},
+        React.createElement("div", { style: { width: 28, height: 28, borderRadius: 8, background: "linear-gradient(135deg,#f97316,#ea580c)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 800, color: "#fff" }}, "S"),
+        React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#f5f5f5" }}, "SalesCoach"),
+          React.createElement("div", { style: { fontSize: 10, color: "#22c55e", fontWeight: 600 }}, myTeam?.name || "Sales Closer")
+        )
+      ),
+
+      // Nav
+      React.createElement("nav", { style: { flex: 1, padding: 8, overflowY: "auto" }},
+        navItems.map(item =>
+          React.createElement("button", {
+            key: item.id,
+            onClick: () => setTab(item.id),
+            style: {
+              display: "flex", alignItems: "center", gap: 10, width: "100%",
+              padding: "8px 10px", borderRadius: 8, border: "none", cursor: "pointer",
+              background: tab===item.id ? "rgba(94,106,210,0.15)" : "transparent",
+              color: tab===item.id ? "#5e6ad2" : "#8b8b8e",
+              fontSize: 13, fontWeight: tab===item.id ? 600 : 400,
+              marginBottom: 2, textAlign: "left", transition: "all 0.1s"
+            }
+          },
+            React.createElement("svg", { width: 16, height: 16, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round", strokeLinejoin: "round", style: { flexShrink: 0 }},
+              React.createElement("path", { d: item.icon })
+            ),
+            item.label
+          )
+        )
+      ),
+
+      // User section
+      React.createElement("div", { style: { borderTop: "1px solid #1f1f22", padding: 8 }},
+        React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8 }},
+          React.createElement("div", { style: { width: 28, height: 28, borderRadius: "50%", background: "#5e6ad2", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "#fff", flexShrink: 0 }}, initials),
+          React.createElement("div", { style: { flex: 1, minWidth: 0 }},
+            React.createElement("div", { style: { fontSize: 12, fontWeight: 600, color: "#f5f5f5", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}, user.name),
+            React.createElement("div", { style: { fontSize: 11, color: "#5b5b5e" }}, "Sales Closer")
+          )
+        ),
+        React.createElement("div", { style: { display: "flex", gap: 4, marginTop: 4 }},
+          React.createElement("button", { onClick: () => setShowChangePin(true), style: { flex: 1, padding: "6px 8px", background: "transparent", border: "1px solid #26262a", borderRadius: 8, color: "#8b8b8e", fontSize: 11, cursor: "pointer" }}, "🔒 PIN"),
+          React.createElement("button", { onClick: onLogout, style: { flex: 1, padding: "6px 8px", background: "transparent", border: "1px solid #26262a", borderRadius: 8, color: "#e5484d", fontSize: 11, cursor: "pointer" }}, "Sign out")
+        )
+      )
+    ),
+
+    // ── Main content
+    React.createElement("div", { style: { marginLeft: 220, flex: 1, display: "flex", flexDirection: "column", minHeight: "100vh" }},
+
+      // Top header
+      React.createElement("header", { style: { height: 56, borderBottom: "1px solid #1f1f22", display: "flex", alignItems: "center", padding: "0 24px", background: "rgba(10,10,11,0.8)", backdropFilter: "blur(12px)", position: "sticky", top: 0, zIndex: 30 }},
+        React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8 }},
+          React.createElement("div", { style: { fontSize: 13, fontWeight: 600, color: "#f5f5f5" }},
+            { dashboard:"Dashboard", upload:"Upload Call", log:"Daily Log", noanswer:"No Answer", history:"History", attendance:"Attendance", leaderboard:"Leaderboard", summary:"AI Summary" }[tab] || "Dashboard"
+          ),
+          React.createElement("div", { style: { fontSize: 12, color: "#4b4b4e" }}, "·"),
+          React.createElement("div", { style: { fontSize: 12, color: "#5b5b5e" }},
+            { dashboard:"Your performance overview", upload:"Transcribe & analyze a call", log:"Submit today's log", noanswer:"Log unanswered calls", history:"All your past calls", attendance:"Your attendance record", leaderboard:"Team & company rankings", summary:"AI-powered period report" }[tab] || ""
+          )
+        )
+      ),
+
+      // Page content
+      React.createElement("main", { style: { flex: 1, padding: 24, maxWidth: 1100, width: "100%" }},
+
+        saved && React.createElement("div", { style: { background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#22c55e" }},
+          "✅ " + (saved==="log" ? "Log submitted! " + (teamType==="socialmedia"?"Auto-approved.":"Waiting for team lead approval.") : "Logged successfully.")
+        ),
+
+        tab === "dashboard" && React.createElement(DashboardTab, null),
+
+        tab === "upload" && React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#f5f5f5", marginBottom: 4 }}, "🎙️ Upload a Call"),
+          React.createElement("div", { style: { fontSize: 13, color: "#5b5b5e", marginBottom: 20 }}, "Claude AI will transcribe, analyze and coach you"),
+          React.createElement(CallUploadSection, { user, teams, refresh })
+        ),
+
+        tab === "log" && React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#f5f5f5", marginBottom: 4 }}, "📋 Daily Log"),
+          teamType === "socialmedia"
+            ? React.createElement("div", { style: { background: "#0f0f10", border: "1px solid #1f1f22", borderRadius: 16, padding: 32, textAlign: "center", color: "#5b5b5e" }},
+                React.createElement("div", { style: { fontSize: 32, marginBottom: 12 }}, "📱"),
+                React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: "#f5f5f5", marginBottom: 6 }}, "Team Log is submitted by Mr Kelvin"),
+                React.createElement("div", { style: { fontSize: 12 }}, "Your commission share appears on your dashboard once submitted.")
+              )
+            : React.createElement("div", null, renderLogForm(),
+                myLogs.length > 1 && React.createElement("div", { style: { background: "#0f0f10", border: "1px solid #1f1f22", borderRadius: 16, padding: 20, marginTop: 16 }},
+                  React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: "#f5f5f5", marginBottom: 14 }}, "Past Logs"),
+                  React.createElement("table", { style: { width: "100%", borderCollapse: "collapse" }},
+                    React.createElement("thead", null,
+                      React.createElement("tr", null, ["Date", teamType==="followup"?"Calls Through":"Assigned","Delivered","Rate","Commission","Status"].map(h =>
+                        React.createElement("th", { key: h, style: { textAlign:"left", padding:"10px 14px", fontSize:11, fontWeight:700, color:"#4b4b4e", textTransform:"uppercase", letterSpacing:"0.07em", borderBottom:"1px solid #1f1f22" }}, h)
+                      ))
+                    ),
+                    React.createElement("tbody", null, myLogs.slice(1,8).map(l =>
+                      React.createElement("tr", { key: l.id },
+                        React.createElement("td", { style: { padding:"12px 14px", fontSize:13, color:"#8b8b8e", borderBottom:"1px solid #141416" }}, l.date),
+                        React.createElement("td", { style: { padding:"12px 14px", fontSize:13, color:"#8b8b8e", borderBottom:"1px solid #141416" }}, l.callsThrough||l.assigned),
+                        React.createElement("td", { style: { padding:"12px 14px", fontSize:13, color:"#8b8b8e", borderBottom:"1px solid #141416" }}, l.delivered),
+                        React.createElement("td", { style: { padding:"12px 14px", borderBottom:"1px solid #141416" }},
+                          React.createElement("span", { style: { background: tierColor(l.commission?.tier||"none")+"18", color: tierColor(l.commission?.tier||"none"), borderRadius:20, padding:"2px 10px", fontSize:12, fontWeight:700 }}, (l.commission?.rate||0)+"%")
+                        ),
+                        React.createElement("td", { style: { padding:"12px 14px", fontSize:13, fontWeight:700, color: tierColor(l.commission?.tier||"none"), borderBottom:"1px solid #141416" }}, fmtNaira(l.commission?.total||0)),
+                        React.createElement("td", { style: { padding:"12px 14px", borderBottom:"1px solid #141416" }},
+                          React.createElement("span", { style: { background: (l.status==="approved"?"#22c55e":l.status==="rejected"?"#ef4444":"#f5a623")+"18", color: l.status==="approved"?"#22c55e":l.status==="rejected"?"#ef4444":"#f5a623", borderRadius:20, padding:"2px 10px", fontSize:12, fontWeight:600 }},
+                            l.status==="approved"?"✅ Approved":l.status==="rejected"?"❌ Rejected":"⏳ Pending"
+                          )
+                        )
+                      )
+                    ))
+                  )
+                )
+              )
+        ),
+
+        tab === "noanswer" && teamType !== "socialmedia" && React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#f5f5f5", marginBottom: 4 }}, "📵 Log No-Answer"),
+          React.createElement(NoAnswerForm, { user, onSaved: async () => { await refresh(); setSaved("noanswer"); setTimeout(() => setSaved(""), 3000); }})
+        ),
+
+        tab === "history" && React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#f5f5f5", marginBottom: 16 }}, "🕐 My Call History"),
+          React.createElement(PeriodTabs, null),
+          myReports.length === 0
+            ? React.createElement("div", { style: { background: "#0f0f10", border: "1px dashed #1f1f22", borderRadius: 16, padding: "48px", textAlign: "center", color: "#4b4b4e" }}, "No calls in this period.")
+            : myReports.map(r => React.createElement(RecentCallRow, { key: r.id, r }))
+        ),
+
+        tab === "attendance" && React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#f5f5f5", marginBottom: 4 }}, "📅 My Attendance"),
+          React.createElement("div", { style: { fontSize: 13, color: "#5b5b5e", marginBottom: 16 }}, "Every approved log = present day"),
+          React.createElement(AttendanceCalendar, { userId: user.id, allLogs, userName: user.name })
+        ),
+
+        tab === "leaderboard" && React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#f5f5f5", marginBottom: 4 }}, "🏆 Leaderboard"),
+          React.createElement("div", { style: { fontSize: 13, color: "#5b5b5e", marginBottom: 16 }}, "See where your team ranks"),
+          React.createElement(PeriodTabs, null),
+          React.createElement(TeamLeaderboard, { users, teams, allReports, allLogs, period, myTeamId: user.teamId, showAllIndividuals: false, closerView: true })
+        ),
+
+        tab === "summary" && React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 22, fontWeight: 800, color: "#f5f5f5", marginBottom: 4 }}, "✨ AI Summary Report"),
+          React.createElement("div", { style: { fontSize: 13, color: "#5b5b5e", marginBottom: 16 }}, "AI-powered analysis of your call performance"),
+          React.createElement(AISummaryReport, { user, users, allReports, allLogs, teams, teamType })
+        )
+
+      )
+    ),
+
+    viewReport && React.createElement(ReportModal, { report: viewReport, onClose: () => setViewReport(null) }),
+    showChangePin && React.createElement(ChangePinModal, { user, onClose: () => setShowChangePin(false), refresh, saveUsersData, allUsers: users }),
+    showOnboarding && React.createElement(OnboardingModal, { user, onClose: closeOnboarding })
+  );
 }
+
 function TeamLeadPortal({ user, users, teams, allReports, allLogs, allNoAnswers, goals, onLogout, refresh, saveUsersData }) {
   const [showChangePin, setShowChangePin] = useState(false);
   const [summaryTarget, setSummaryTarget] = useState(null);
