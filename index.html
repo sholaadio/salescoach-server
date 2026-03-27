@@ -2282,15 +2282,24 @@ function GoalProgress(props) {
     // Collect goals relevant to this user: personal + their team + company-wide
     var myGoals = goals.filter(function(g) {
       if (!g || !g.month) return false;
-      // Accept both exact month match and close months (handles UTC offset storage)
-      var gMonth = g.month;
-      if (gMonth !== thisMonth) return false;
+      if (g.month !== thisMonth) return false;
+      // Company goals: visible to everyone
       if (g.scope === "company") return true;
-      if (g.userId === userId) return true;
+      // Individual goals: match on userId (handle null/undefined scope)
+      if (g.userId && g.userId === userId) return true;
+      // Team goals: match on teamId
       if (g.teamId && g.teamId === teamId) return true;
       return false;
     });
-    if (myGoals.length === 0) return null;
+    if (myGoals.length === 0) {
+      return React.createElement("div", { style: { background: C.card, border: "1px solid " + C.border, borderRadius: 8, padding: "14px 20px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 } },
+        React.createElement("div", { style: { fontSize: 20 } }, "🎯"),
+        React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 12, fontWeight: 600, color: C.text } }, "No goals set yet"),
+          React.createElement("div", { style: { fontSize: 11, color: C.muted } }, "Your team lead or head of sales will set monthly goals for you here")
+        )
+      );
+    }
 
     // Compute company-wide progress for company goals
     var allClosers = Object.values(users).filter(function(u) { return u.role === "closer"; });
@@ -2344,21 +2353,20 @@ function GoalTrackerPanel(props) {
     if (!g || !g.month || g.month !== thisMonth) return false;
     if (g.scope === "company") return true;
     if (scope === "team") {
-      // Show goals set BY this user OR goals for their team/members
-      if (g.setBy === user.id) return true;
-      if (g.teamId === myTeamId) return true;
+      if (g.setBy === user.id) return true;           // goals I set
+      if (g.teamId && g.teamId === myTeamId) return true; // team goals for my team
       if (g.userId) {
         var u = users[g.userId];
-        return u && u.teamId === myTeamId;
+        return u && u.teamId === myTeamId;             // individual goals for my members
       }
       return false;
     }
-    return true; // company scope: show all
+    return true;
   });
 
   var companyGoals = visibleGoals.filter(function(g) { return g.scope === "company"; });
   var teamGoals    = visibleGoals.filter(function(g) { return g.teamId && !g.userId && g.scope !== "company"; });
-  var indivGoals   = visibleGoals.filter(function(g) { return g.userId && !g.scope; });
+  var indivGoals   = visibleGoals.filter(function(g) { return g.userId && g.scope !== "company"; });
 
   var SectionHead = function(props) {
     return React.createElement("div", { style: { fontSize: 12, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10, marginTop: 20 } }, props.label);
@@ -2372,7 +2380,7 @@ function GoalTrackerPanel(props) {
       allClosers.forEach(function(c) {
         current += computeGoalProgress(g, c.id, allLogs, thisMonth).current;
       });
-    } else if (g.teamId) {
+    } else if (g.teamId && !g.userId) {
       var tMembers = Object.values(users).filter(function(u) { return u.teamId === g.teamId && u.role === "closer"; });
       tMembers.forEach(function(m) {
         current += computeGoalProgress(g, m.id, allLogs, thisMonth).current;
@@ -2511,9 +2519,9 @@ function GoalSettingPanel(props) {
       label: label,
       setBy: user.id,
       createdAt: Date.now(),
-      scope: scope === "company" ? "company" : undefined,
-      userId: scope === "individual" ? targetId : undefined,
-      teamId: scope === "team" ? targetId : undefined,
+      scope: scope === "company" ? "company" : null,
+      userId: scope === "individual" ? targetId : null,
+      teamId: scope === "team" ? targetId : null,
     };
     await onSaveGoal(g);
     flash("✅ Goal set!");
