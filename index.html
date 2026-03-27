@@ -76,17 +76,27 @@ async function apiPost(path, body) {
 async function transcribeAudio(audioFile) {
   const formData = new FormData();
   formData.append("audio", audioFile, audioFile.name);
-  const response = await fetch(`${SERVER}/transcribe`, {
-    method: "POST",
-    body: formData
-  });
-  if (!response.ok) {
-    const err = await response.json().catch(() => ({}));
-    throw new Error(err.error || "Transcription failed. Please try again.");
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 min timeout
+  try {
+    const response = await fetch(`${SERVER}/transcribe`, {
+      method: "POST",
+      body: formData,
+      signal: controller.signal
+    });
+    clearTimeout(timeoutId);
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error || "Transcription failed. Please try again.");
+    }
+    const data = await response.json();
+    if (!data.transcript) throw new Error("No transcript returned from server.");
+    return data.transcript;
+  } catch(e) {
+    clearTimeout(timeoutId);
+    if (e.name === "AbortError") throw new Error("Upload timed out. Check your connection and try again.");
+    throw e;
   }
-  const data = await response.json();
-  if (!data.transcript) throw new Error("No transcript returned from server.");
-  return data.transcript;
 }
 async function analyzeWithClaude({ transcript, closerName, callType, callOutcome, product, teamType }) {
   const response = await fetch(`${SERVER}/analyze`, {
@@ -1488,7 +1498,7 @@ function TeamLeadPortal({ user, users, teams, allReports, allLogs, allNoAnswers,
   ) : null), tab === "attendance" && /* @__PURE__ */ React.createElement(AttendanceTab, { user, users, teams, allLogs, scope: "team" }), tab === "goals" && /* @__PURE__ */ React.createElement(GoalSettingPanel, { user, users, teams, allLogs, goals: goals || [], onSaveGoal: async (g) => {
     await saveGoal_api(g);
     await refresh();
-  }, flash })
+  }, onDeleteGoal: async () => { await refresh(); }, flash })
       )
     ),
     viewReport && React.createElement(ReportModal, { report: viewReport, onClose: () => setViewReport(null) }),
@@ -1920,7 +1930,7 @@ function ManagementDashboard({ user, users, teams, allReports, allLogs, allNoAns
   }))))), tab === "commreport" && /* @__PURE__ */ React.createElement(CommissionReport, { users, teams, allLogs }), tab === "attendance" && /* @__PURE__ */ React.createElement(AttendanceTab, { user, users, teams, allLogs, scope: "company" }), tab === "goals" && /* @__PURE__ */ React.createElement(GoalSettingPanel, { user, users, teams, allLogs, goals: goals || [], onSaveGoal: async (g) => {
     await saveGoal_api(g);
     await refresh();
-  }, flash }), tab === "roles" && (perms.manageRoles || perms.resetPins) && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(PinResetPanel, { user, users, saveUsersData, refresh, flash }), perms.manageRoles && /* @__PURE__ */ React.createElement(PermissionsPanel, { users, saveUsersData, refresh, flash })), tab === "summary" && perms.generateSummary && /* @__PURE__ */ React.createElement(ManagementSummaryTab, { user, users, allReports, allLogs, teams })
+  }, onDeleteGoal: async () => { await refresh(); }, flash }), tab === "roles" && (perms.manageRoles || perms.resetPins) && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(PinResetPanel, { user, users, saveUsersData, refresh, flash }), perms.manageRoles && /* @__PURE__ */ React.createElement(PermissionsPanel, { users, saveUsersData, refresh, flash })), tab === "summary" && perms.generateSummary && /* @__PURE__ */ React.createElement(ManagementSummaryTab, { user, users, allReports, allLogs, teams })
       )
     ),
     viewReport && React.createElement(ReportModal, { report: viewReport, onClose: () => setViewReport(null) }),
@@ -2211,84 +2221,312 @@ async function saveGoal_api(g) {
     console.error(e);
   }
 }
-function GoalProgress({ userId, allLogs, teams, users, goals }) {
-  const now = /* @__PURE__ */ new Date();
-  const thisMonth = now.toISOString().slice(0, 7);
-  const userGoals = goals.filter((g) => g.userId === userId && g.month === thisMonth);
-  const user2 = users[userId];
-  const teamType = teams[user2?.teamId]?.type || "sales";
-  const monthLogs = allLogs.filter((l) => l.closerId === userId && l.date?.startsWith(thisMonth) && l.status === "approved");
-  const totalDelivered = monthLogs.reduce((s, l) => s + (+l.delivered || 0), 0);
-  const totalAssigned = monthLogs.reduce((s, l) => s + (+(l.callsThrough || l.assigned) || 0), 0);
+// ── Goal helper: compute current progress for a user
+function computeGoalProgress(g, userId, allLogs, thisMonth) {
+  const monthLogs = allLogs.filter(l => l.closerId === userId && l.date?.startsWith(thisMonth) && l.status === "approved");
+  const totalDelivered = monthLogs.reduce((s,l) => s + (+l.delivered||0), 0);
+  const totalAssigned  = monthLogs.reduce((s,l) => s + (+(l.callsThrough||l.assigned)||0), 0);
   const convRate = totalAssigned > 0 ? Math.round(totalDelivered / totalAssigned * 100) : 0;
-  if (userGoals.length === 0) return null;
-  return /* @__PURE__ */ React.createElement("div", { style: { ...S.card, marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 12 } }, "\u{1F3AF} Monthly Goals \u2014 ", thisMonth), userGoals.map((g) => {
-    let current = 0;
-    if (g.type === "delivered") current = totalDelivered;
-    if (g.type === "conversion") current = convRate;
-    if (g.type === "calls") current = allLogs.filter((l) => l.closerId === userId && l.date?.startsWith(thisMonth)).length;
-    const pct = Math.min(Math.round(current / g.target * 100), 100);
-    const met = current >= g.target;
-    return /* @__PURE__ */ React.createElement("div", { key: g.id, style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: met ? C.green : C.text } }, g.label), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 12, fontWeight: 800, color: met ? C.green : C.yellow } }, current, "/", g.target, " ", met ? "\u2705" : "")), /* @__PURE__ */ React.createElement("div", { style: { height: 8, background: "rgba(255,255,255,0.06)", borderRadius: 999, overflow: "hidden" } }, /* @__PURE__ */ React.createElement("div", { style: { width: pct + "%", height: "100%", background: met ? `linear-gradient(90deg,${C.green},#00B37A)` : `linear-gradient(90deg,${C.yellow},#E09000)`, borderRadius: 999, transition: "width 0.8s ease" } })), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 10, color: C.muted, marginTop: 3 } }, pct, "% complete"));
-  }));
+  const callsLogged = allLogs.filter(l => l.closerId === userId && l.date?.startsWith(thisMonth)).length;
+  const upsells = monthLogs.reduce((s,l) => s + (+l.upsells||0), 0);
+  const earnings = monthLogs.reduce((s,l) => s + (l.commission?.total||l.commission?.perMember||0), 0);
+  let current = 0;
+  if (g.type === "delivered")   current = totalDelivered;
+  if (g.type === "conversion")  current = convRate;
+  if (g.type === "calls")       current = callsLogged;
+  if (g.type === "upsells")     current = upsells;
+  if (g.type === "earnings")    current = earnings;
+  return { current, totalDelivered, convRate, callsLogged };
 }
-function GoalSettingPanel({ user, users, teams, allLogs, goals, onSaveGoal, flash }) {
-  const now = /* @__PURE__ */ new Date();
+
+// ── GoalProgress: shown on Closer dashboard
+function GoalProgress({ userId, allLogs, teams, users, goals }) {
+  const now = new Date();
+  const thisMonth = now.toISOString().slice(0,7);
+  // Show both individual goals and team goals for this user's team
+  const teamId = users[userId]?.teamId;
+  const userGoals = goals.filter(g =>
+    (g.userId === userId || (g.teamId && g.teamId === teamId)) && g.month === thisMonth
+  );
+  if (userGoals.length === 0) return null;
+
+  return React.createElement("div", { style: { ...S.card, marginBottom: 16 } },
+    React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 } }, "🎯 Monthly Goals"),
+    React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 14 } }, now.toLocaleString("en-NG", { month: "long" }) + " " + now.getFullYear()),
+    userGoals.map(g => {
+      const isTeamGoal = !!g.teamId && !g.userId;
+      const { current } = computeGoalProgress(g, userId, allLogs, thisMonth);
+      const pct = Math.min(Math.round(current / g.target * 100), 100);
+      const met = current >= g.target;
+      const barColor = met ? C.green : pct >= 70 ? C.yellow : C.orange;
+      return React.createElement("div", { key: g.id, style: { marginBottom: 16 } },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 5 } },
+          React.createElement("div", null,
+            React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: met ? C.green : C.text } }, g.label),
+            React.createElement("div", { style: { fontSize: 10, color: C.muted, marginTop: 1 } },
+              isTeamGoal ? "🏢 Team goal · " : "👤 Personal goal · ",
+              "Set by ", users[g.setBy]?.name?.split(" ")[0] || "manager"
+            )
+          ),
+          React.createElement("div", { style: { textAlign: "right" } },
+            React.createElement("div", { style: { fontSize: 14, fontWeight: 900, color: met ? C.green : barColor } },
+              g.type === "earnings" ? fmtNaira(current) : current,
+              React.createElement("span", { style: { fontSize: 11, color: C.muted, fontWeight: 400 } },
+                " / ", g.type === "earnings" ? fmtNaira(g.target) : g.target
+              )
+            ),
+            met && React.createElement("div", { style: { fontSize: 10, color: C.green, fontWeight: 700 } }, "✅ Achieved!")
+          )
+        ),
+        React.createElement("div", { style: { height: 8, background: "rgba(255,255,255,0.06)", borderRadius: 999, overflow: "hidden" } },
+          React.createElement("div", { style: { width: pct + "%", height: "100%", background: met ? `linear-gradient(90deg,${C.green},#00B37A)` : `linear-gradient(90deg,${barColor},${barColor}99)`, borderRadius: 999, transition: "width 0.8s ease" } })
+        ),
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginTop: 4, fontSize: 10, color: C.muted } },
+          React.createElement("span", null, pct + "% complete"),
+          React.createElement("span", null, Math.max(0, g.target - current) + " " + (g.type === "earnings" ? "₦ remaining" : "more to go"))
+        )
+      );
+    })
+  );
+}
+
+// ── GoalCard used in TeamLead/Management views
+function GoalCard({ g, users, allLogs, teams, thisMonth, onDelete, canDelete }) {
+  const isTeamGoal = !!g.teamId && !g.userId;
+  const targetUser = !isTeamGoal ? users[g.userId] : null;
+  const team = isTeamGoal ? teams[g.teamId] : null;
+
+  // For team goals, aggregate progress across all team members
+  let current = 0;
+  if (isTeamGoal) {
+    const members = Object.values(users).filter(u => u.teamId === g.teamId && u.role === "closer");
+    members.forEach(m => {
+      const { current: c } = computeGoalProgress(g, m.id, allLogs, thisMonth);
+      current += c;
+    });
+  } else if (targetUser) {
+    const { current: c } = computeGoalProgress(g, g.userId, allLogs, thisMonth);
+    current = c;
+  }
+
+  const pct = Math.min(Math.round(current / g.target * 100), 100);
+  const met = current >= g.target;
+  const barColor = met ? C.green : pct >= 70 ? C.yellow : C.orange;
+
+  return React.createElement("div", { style: { ...S.card, position: "relative", overflow: "hidden", marginBottom: 0 } },
+    React.createElement("div", { style: { position: "absolute", top: 0, left: 0, right: 0, height: 2, background: met ? C.green : barColor } }),
+    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 } },
+      React.createElement("div", null,
+        React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 3 } }, g.label),
+        React.createElement("div", { style: { display: "flex", gap: 6, flexWrap: "wrap" } },
+          React.createElement("span", { style: S.pill(isTeamGoal ? C.purple : C.blue) }, isTeamGoal ? "🏢 " + (team?.name || "Team") : "👤 " + (targetUser?.name || "—")),
+          React.createElement("span", { style: S.pill(C.muted) }, { delivered:"📦 Orders", conversion:"📈 Conversion %", calls:"🎙️ Calls", upsells:"⚡ Upsells", earnings:"💰 Earnings" }[g.type] || g.type)
+        )
+      ),
+      React.createElement("div", { style: { textAlign: "right", flexShrink: 0, marginLeft: 12 } },
+        React.createElement("div", { style: { fontSize: 18, fontWeight: 900, color: met ? C.green : barColor } },
+          g.type === "earnings" ? fmtNaira(current) : current,
+          React.createElement("span", { style: { fontSize: 12, color: C.muted, fontWeight: 400 } }, " / ", g.type === "earnings" ? fmtNaira(g.target) : g.target)
+        ),
+        React.createElement("div", { style: { fontSize: 10, color: met ? C.green : C.muted, fontWeight: met ? 700 : 400 } }, met ? "✅ Goal met!" : pct + "% done")
+      )
+    ),
+    React.createElement("div", { style: { height: 7, background: "rgba(255,255,255,0.06)", borderRadius: 999, overflow: "hidden", marginBottom: 6 } },
+      React.createElement("div", { style: { width: pct + "%", height: "100%", background: met ? `linear-gradient(90deg,${C.green},#00B37A)` : `linear-gradient(90deg,${barColor},${barColor}88)`, borderRadius: 999, transition: "width 0.8s ease" } })
+    ),
+    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", fontSize: 10, color: C.muted } },
+      React.createElement("span", null, "Set by ", users[g.setBy]?.name?.split(" ")[0] || "—", " · ", g.month),
+      canDelete && React.createElement("button", { onClick: () => onDelete(g.id), style: { background: "transparent", border: "none", color: C.red, fontSize: 11, cursor: "pointer", padding: 0 } }, "Remove")
+    )
+  );
+}
+
+// ── GoalSettingPanel: used by TeamLead, Head of Sales, Management
+function GoalSettingPanel({ user, users, teams, allLogs, goals, onSaveGoal, onDeleteGoal, flash }) {
+  const now = new Date();
+  const thisMonth = now.toISOString().slice(0,7);
+  const MONTHS_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+  const [mode, setMode] = useState("individual"); // "individual" | "team"
   const [selUser, setSelUser] = useState(null);
+  const [selTeam, setSelTeam] = useState(null);
   const [goalType, setGoalType] = useState("delivered");
   const [target, setTarget] = useState("");
   const [label, setLabel] = useState("");
   const [saving, setSaving] = useState(false);
-  const thisMonth = now.toISOString().slice(0, 7);
-  const MONTHS_FULL = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  const eligible = Object.values(users).filter((u) => ["closer", "teamlead"].includes(u.role)).sort((a, b) => a.name.localeCompare(b.name));
+  const [viewMonth, setViewMonth] = useState(thisMonth);
+
+  const isHeadSales = user.role === "head_sales";
+  const isTeamLead  = user.role === "teamlead";
+  const isMgmt      = ["ceo","gm","head_creative","hr"].includes(user.role);
+
+  // TeamLead: only their own team members
+  // Head of Sales: all closers + teamleads + all teams
+  // Management: view only (no set) — except CEO/GM can set too
+  const canSetGoals = isTeamLead || isHeadSales || user.role === "ceo" || user.role === "gm";
+  const canSetTeamGoals = isHeadSales || user.role === "ceo" || user.role === "gm";
+
+  const eligibleUsers = Object.values(users).filter(u => {
+    if (!["closer","teamlead"].includes(u.role)) return false;
+    if (isTeamLead) return u.teamId === user.teamId; // TL: only own team
+    return true; // head_sales/ceo/gm: everyone
+  }).sort((a,b) => a.name.localeCompare(b.name));
+
+  const eligibleTeams = Object.values(teams).sort((a,b) => a.name.localeCompare(b.name));
+
   const goalTypeOptions = [
-    { v: "delivered", l: "\u{1F4E6} Orders Delivered" },
-    { v: "conversion", l: "\u{1F4C8} Conversion Rate %" },
-    { v: "calls", l: "\u{1F399}\uFE0F Calls Logged" }
+    { v: "delivered",  l: "📦 Orders Delivered" },
+    { v: "conversion", l: "📈 Conversion Rate %" },
+    { v: "calls",      l: "🎙️ Calls Logged" },
+    { v: "upsells",    l: "⚡ Upsells" },
+    { v: "earnings",   l: "💰 Commission Earned (₦)" },
   ];
-  const existingGoals = selUser ? goals.filter((g) => g.userId === selUser && g.month === thisMonth) : [];
-  const save = async () => {
-    if (!selUser || !target || !label) {
-      flash("\u26A0\uFE0F Fill all fields");
-      return;
+
+  // Goals visible to this user
+  const visibleGoals = goals.filter(g => {
+    if (g.month !== viewMonth) return false;
+    if (isTeamLead) {
+      // TL sees goals they set + goals for their team members set by anyone
+      const memberIds = Object.values(users).filter(u => u.teamId === user.teamId).map(u => u.id);
+      return g.setBy === user.id || memberIds.includes(g.userId) || g.teamId === user.teamId;
     }
+    return true; // head_sales/mgmt see all
+  });
+
+  const individualGoals = visibleGoals.filter(g => !!g.userId && !g.teamId);
+  const teamGoals = visibleGoals.filter(g => !!g.teamId && !g.userId);
+
+  const autoLabel = () => {
+    const typeLabel = { delivered:"Deliver", conversion:"Hit", calls:"Log", upsells:"Achieve", earnings:"Earn" }[goalType] || "";
+    const unit = { delivered:"orders", conversion:"% conversion rate", calls:"calls", upsells:"upsells", earnings:"₦ in commission" }[goalType] || "";
+    const name = mode === "team" ? (teams[selTeam]?.name || "team") : (users[selUser]?.name?.split(" ")[0] || "");
+    if (target) setLabel(`${typeLabel} ${target} ${unit} this month`);
+  };
+
+  const save = async () => {
+    const targetId = mode === "individual" ? selUser : selTeam;
+    if (!targetId || !target || !label) { flash("⚠️ Fill all fields"); return; }
     setSaving(true);
     const g = {
       id: uid(),
-      userId: selUser,
       month: thisMonth,
       type: goalType,
       target: +target,
       label,
       setBy: user.id,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      ...(mode === "individual" ? { userId: targetId } : { teamId: targetId })
     };
     await onSaveGoal(g);
-    await flash("\u2705 Goal set for " + users[selUser]?.name);
-    setTarget("");
-    setLabel("");
+    flash("✅ Goal set!");
+    setTarget(""); setLabel(""); setSelUser(null); setSelTeam(null);
     setSaving(false);
   };
-  return /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("h1", { style: { fontSize: 22, fontWeight: 900, marginBottom: 4 } }, "\u{1F3AF} Goal Setting"), /* @__PURE__ */ React.createElement("p", { style: { fontSize: 13, color: C.muted, marginBottom: 20 } }, "Set monthly targets for your team \u2014 ", MONTHS_FULL[now.getMonth()], " ", now.getFullYear()), /* @__PURE__ */ React.createElement("div", { style: { ...S.card, marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 10 } }, "Select staff member:"), /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } }, eligible.map((u) => /* @__PURE__ */ React.createElement(
-    "button",
-    {
-      key: u.id,
-      onClick: () => setSelUser(u.id),
-      style: { background: selUser === u.id ? "rgba(249,115,22,0.15)" : "rgba(255,255,255,0.04)", border: "1px solid " + (selUser === u.id ? "rgba(249,115,22,0.4)" : "rgba(255,255,255,0.08)"), borderRadius: 10, padding: "7px 14px", color: selUser === u.id ? C.orange : C.soft, cursor: "pointer", fontSize: 12, fontWeight: 600 }
-    },
-    u.name,
-    " ",
-    /* @__PURE__ */ React.createElement("span", { style: { fontSize: 10, color: C.muted } }, "(", teams[u.teamId]?.name || "\u2014", ")")
-  )))), selUser && /* @__PURE__ */ React.createElement(React.Fragment, null, existingGoals.length > 0 && /* @__PURE__ */ React.createElement("div", { style: { ...S.card, marginBottom: 16 } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, marginBottom: 10 } }, "Current goals for ", users[selUser]?.name, " \u2014 ", thisMonth), existingGoals.map((g) => /* @__PURE__ */ React.createElement("div", { key: g.id, style: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: `1px solid ${C.border}` } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, color: C.text } }, g.label), /* @__PURE__ */ React.createElement("span", { style: S.pill(C.orange) }, "Target: ", g.target)))), /* @__PURE__ */ React.createElement("div", { style: { ...S.card, background: "rgba(249,115,22,0.03)", border: "1px solid rgba(249,115,22,0.15)" } }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.orange, marginBottom: 14 } }, "\uFF0B Add New Goal for ", users[selUser]?.name), /* @__PURE__ */ React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 } }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: S.label }, "Goal Type"), /* @__PURE__ */ React.createElement("select", { style: S.select, value: goalType, onChange: (e) => setGoalType(e.target.value) }, goalTypeOptions.map((o) => /* @__PURE__ */ React.createElement("option", { key: o.v, value: o.v }, o.l)))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: S.label }, "Target Number"), /* @__PURE__ */ React.createElement("input", { type: "number", style: S.input, placeholder: goalType === "conversion" ? "e.g. 80 (%)" : "e.g. 50", value: target, onChange: (e) => setTarget(e.target.value), min: "1" }))), /* @__PURE__ */ React.createElement("div", { style: { marginBottom: 14 } }, /* @__PURE__ */ React.createElement("label", { style: S.label }, "Goal Label (shown to staff)"), /* @__PURE__ */ React.createElement("input", { type: "text", style: S.input, placeholder: `e.g. "Deliver 50 orders this month"`, value: label, onChange: (e) => setLabel(e.target.value) })), /* @__PURE__ */ React.createElement(
-    "button",
-    {
-      onClick: save,
-      disabled: saving || !target || !label,
-      style: { ...S.btn, opacity: saving || !target || !label ? 0.5 : 1 }
-    },
-    saving ? "Saving..." : "\u{1F3AF} Set Goal"
-  ))));
+
+  const deleteGoal = async (goalId) => {
+    if (!window.confirm("Remove this goal?")) return;
+    try {
+      await fetch(SERVER + "/goals/" + goalId, { method: "DELETE" });
+      flash("🗑️ Goal removed");
+      // Refresh handled by parent
+      if (onDeleteGoal) onDeleteGoal(goalId);
+    } catch(e) { flash("❌ Failed to remove"); }
+  };
+
+  // Month picker: last 3 months + current
+  const monthOptions = [];
+  for (let i = 2; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    monthOptions.push(d.toISOString().slice(0,7));
+  }
+  monthOptions.push(thisMonth);
+  const uniqueMonths = [...new Set(monthOptions)];
+
+  return React.createElement("div", null,
+    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 4, flexWrap: "wrap", gap: 10 } },
+      React.createElement("div", null,
+        React.createElement("h1", { style: { fontSize: 22, fontWeight: 900, marginBottom: 4 } }, "🎯 Goals"),
+        React.createElement("p", { style: { fontSize: 13, color: C.muted } }, MONTHS_FULL[now.getMonth()] + " " + now.getFullYear() + " · " + visibleGoals.length + " active goals")
+      ),
+      React.createElement("div", { style: { display: "flex", gap: 8, alignItems: "center" } },
+        React.createElement("select", { value: viewMonth, onChange: e => setViewMonth(e.target.value), style: { ...S.select, width: "auto", padding: "6px 12px", fontSize: 12 } },
+          uniqueMonths.map(m => React.createElement("option", { key: m, value: m }, m))
+        )
+      )
+    ),
+
+    // ── Active Goals View
+    React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 20 } },
+      visibleGoals.length === 0
+        ? React.createElement("div", { style: { ...S.card, gridColumn: "span 2", textAlign: "center", padding: "40px", color: C.muted } }, "No goals set for ", viewMonth, ". Set one below ↓")
+        : visibleGoals.map(g => React.createElement(GoalCard, { key: g.id, g, users, allLogs, teams, thisMonth: viewMonth,
+            canDelete: g.setBy === user.id || user.role === "ceo" || user.role === "gm",
+            onDelete: deleteGoal
+          }))
+    ),
+
+    // ── Set New Goal (only for those who can)
+    canSetGoals && viewMonth === thisMonth && React.createElement("div", { style: { ...S.card, background: "rgba(249,115,22,0.03)", border: "1px solid rgba(249,115,22,0.2)" } },
+      React.createElement("div", { style: { fontSize: 15, fontWeight: 800, color: C.orange, marginBottom: 16 } }, "+ Set New Goal"),
+
+      // Mode toggle: Individual vs Team
+      canSetTeamGoals && React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16 } },
+        ["individual","team"].map(m => React.createElement("button", {
+          key: m, onClick: () => { setMode(m); setSelUser(null); setSelTeam(null); },
+          style: { background: mode === m ? "rgba(249,115,22,0.15)" : "rgba(255,255,255,0.04)", border: "1px solid " + (mode === m ? "rgba(249,115,22,0.4)" : "rgba(255,255,255,0.08)"), borderRadius: 20, padding: "7px 18px", color: mode === m ? C.orange : C.muted, cursor: "pointer", fontSize: 13, fontWeight: mode === m ? 700 : 400 }
+        }, m === "individual" ? "👤 Individual Goal" : "🏢 Team Goal"))
+      ),
+
+      // Select target
+      React.createElement("div", { style: { marginBottom: 14 } },
+        React.createElement("label", { style: S.label }, mode === "individual" ? "Select Staff Member" : "Select Team"),
+        React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
+          mode === "individual"
+            ? eligibleUsers.map(function(u) { return React.createElement("button", {
+                key: u.id, onClick: function() { setSelUser(u.id); },
+                style: { background: selUser === u.id ? "rgba(249,115,22,0.15)" : "rgba(255,255,255,0.04)", border: "1px solid " + (selUser === u.id ? "rgba(249,115,22,0.4)" : "rgba(255,255,255,0.08)"), borderRadius: 8, padding: "6px 12px", color: selUser === u.id ? C.orange : C.soft, cursor: "pointer", fontSize: 12, fontWeight: 600 }
+              }, u.name, React.createElement("span", { style: { fontSize: 10, color: C.muted, marginLeft: 4 } }, "(", teams[u.teamId] ? teams[u.teamId].name : "-", ")")); })
+            : eligibleTeams.map(function(t) { return React.createElement("button", {
+                key: t.id, onClick: function() { setSelTeam(t.id); },
+                style: { background: selTeam === t.id ? "rgba(167,139,250,0.15)" : "rgba(255,255,255,0.04)", border: "1px solid " + (selTeam === t.id ? "rgba(167,139,250,0.4)" : "rgba(255,255,255,0.08)"), borderRadius: 8, padding: "6px 12px", color: selTeam === t.id ? C.purple : C.soft, cursor: "pointer", fontSize: 12, fontWeight: 600 }
+              }, teamTypeIcon(t.type), " ", t.name); })
+        )
+      ),
+
+      // Goal type + target
+      React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 } },
+        React.createElement("div", null,
+          React.createElement("label", { style: S.label }, "Goal Type"),
+          React.createElement("select", { style: S.select, value: goalType, onChange: e => { setGoalType(e.target.value); setLabel(""); } },
+            goalTypeOptions.map(o => React.createElement("option", { key: o.v, value: o.v }, o.l))
+          )
+        ),
+        React.createElement("div", null,
+          React.createElement("label", { style: S.label }, goalType === "conversion" ? "Target % (e.g. 80)" : goalType === "earnings" ? "Target ₦ Amount" : "Target Number"),
+          React.createElement("input", { type: "number", style: S.input, placeholder: goalType === "conversion" ? "e.g. 80" : goalType === "earnings" ? "e.g. 50000" : "e.g. 50", value: target, min: "1",
+            onChange: e => setTarget(e.target.value),
+            onBlur: autoLabel
+          })
+        )
+      ),
+
+      React.createElement("div", { style: { marginBottom: 16 } },
+        React.createElement("label", { style: S.label }, "Goal Label (what staff sees)"),
+        React.createElement("input", { type: "text", style: S.input, placeholder: "e.g. Deliver 50 orders this month", value: label, onChange: e => setLabel(e.target.value) })
+      ),
+
+      React.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center" } },
+        React.createElement("button", { onClick: save, disabled: saving || !target || !label || (mode==="individual"?!selUser:!selTeam), style: { ...S.btn, opacity: saving||!target||!label||(mode==="individual"?!selUser:!selTeam) ? 0.5:1, padding:"11px 28px" } },
+          saving ? "Saving..." : "🎯 Set Goal"
+        ),
+        React.createElement("div", { style: { fontSize: 12, color: C.muted } },
+          mode === "individual" && selUser ? "For: " + users[selUser]?.name :
+          mode === "team" && selTeam ? "For: " + teams[selTeam]?.name :
+          "Select a " + mode + " above"
+        )
+      )
+    )
+  );
 }
 function CommissionReport({ users, teams, allLogs }) {
   const now = /* @__PURE__ */ new Date();
