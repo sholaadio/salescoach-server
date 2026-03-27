@@ -31,10 +31,51 @@ const sb = async (path, method, body) => {
   return r.json();
 };
 
+// Detect file format from magic bytes (first few bytes of file)
+function detectFormatFromBuffer(buffer) {
+  if (!buffer || buffer.length < 12) return null;
+  const b = buffer;
+  // MP3: starts with ID3 or 0xFF 0xFB/0xF3/0xF2
+  if (b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) return "mp3";
+  if (b[0] === 0xFF && (b[1] === 0xFB || b[1] === 0xF3 || b[1] === 0xF2 || b[1] === 0xE3)) return "mp3";
+  // WAV: RIFF....WAVE
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 &&
+      b[8] === 0x57 && b[9] === 0x41 && b[10] === 0x56 && b[11] === 0x45) return "wav";
+  // OGG: OggS
+  if (b[0] === 0x4F && b[1] === 0x67 && b[2] === 0x67 && b[3] === 0x53) return "ogg";
+  // FLAC: fLaC
+  if (b[0] === 0x66 && b[1] === 0x4C && b[2] === 0x61 && b[3] === 0x43) return "flac";
+  // MP4/M4A/3GPP/AAC: ftyp box at offset 4
+  if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return "mp4";
+  // WebM/MKV: EBML header
+  if (b[0] === 0x1A && b[1] === 0x45 && b[2] === 0xDF && b[3] === 0xA3) return "webm";
+  // AMR: starts with #!AMR
+  if (b[0] === 0x23 && b[1] === 0x21 && b[2] === 0x41 && b[3] === 0x4D && b[4] === 0x52) return "amr";
+  // AAC ADTS: 0xFF 0xF1 or 0xFF 0xF9
+  if (b[0] === 0xFF && (b[1] === 0xF1 || b[1] === 0xF9)) return "aac";
+  return null;
+}
+
 // Map MIME types and file extensions to a Whisper-compatible filename + contentType
-function getWhisperFileInfo(originalname, mimetype) {
+function getWhisperFileInfo(originalname, mimetype, buffer) {
   const name = (originalname || "recording").toLowerCase();
   const ext = name.includes(".") ? name.split(".").pop() : "";
+  
+  // Try magic bytes first — most reliable for Android files with no extension
+  const detected = buffer ? detectFormatFromBuffer(buffer) : null;
+  if (detected) {
+    const magicMap = {
+      "mp3":  { filename: "recording.mp3",  contentType: "audio/mpeg" },
+      "wav":  { filename: "recording.wav",  contentType: "audio/wav" },
+      "ogg":  { filename: "recording.ogg",  contentType: "audio/ogg" },
+      "flac": { filename: "recording.flac", contentType: "audio/flac" },
+      "mp4":  { filename: "recording.mp4",  contentType: "video/mp4" },
+      "webm": { filename: "recording.webm", contentType: "audio/webm" },
+      "amr":  { filename: "recording.mp4",  contentType: "video/mp4" },
+      "aac":  { filename: "recording.m4a",  contentType: "audio/mp4" },
+    };
+    if (magicMap[detected]) return magicMap[detected];
+  }
 
   // Whisper supported formats: flac, m4a, mp3, mp4, mpeg, mpga, oga, ogg, wav, webm
   // We map everything else to the closest compatible format
@@ -205,7 +246,7 @@ app.post("/transcribe", upload.single("audio"), async function(req, res) {
     if (!OPENAI_KEY) return res.status(500).json({ error: "OpenAI key missing." });
 
     // Get correct filename/contentType for Whisper based on MIME type and extension
-    const fileInfo = getWhisperFileInfo(req.file.originalname, req.file.mimetype);
+    const fileInfo = getWhisperFileInfo(req.file.originalname, req.file.mimetype, req.file.buffer);
 
     const form = new FormData();
     form.append("file", req.file.buffer, {
