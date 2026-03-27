@@ -1196,7 +1196,7 @@ function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, g
       ),
 
       // Page content
-      React.createElement("main", { style: { flex: 1, padding: 24, maxWidth: 1100, width: "100%" }},
+      React.createElement("main", { style: { flex: 1, padding: 24, maxWidth: 1300, width: "100%" }},
 
         saved && React.createElement("div", { style: { background: "rgba(34,197,94,0.08)", border: "1px solid rgba(34,197,94,0.2)", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: C.green }},
           "✅ " + (saved==="log" ? "Log submitted! " + (teamType==="socialmedia"?"Auto-approved.":"Waiting for team lead approval.") : "Logged successfully.")
