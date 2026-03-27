@@ -245,6 +245,11 @@ app.post("/goals", async function(req, res) {
   catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+app.delete("/goals/:id", async function(req, res) {
+  try { await sb("sc_goals?id=eq." + req.params.id, "DELETE"); res.json({ ok: true }); }
+  catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // Convert audio buffer to MP3 using ffmpeg
 function convertToMp3(inputBuffer, inputExt) {
   return new Promise(function(resolve, reject) {
