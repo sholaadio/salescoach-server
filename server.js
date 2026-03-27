@@ -240,26 +240,52 @@ app.delete("/noanswers/:id", async function(req, res) {
   catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Goals stored as JSON file (bypasses Supabase schema issues)
-const GOALS_FILE = path.join(__dirname, "goals_data.json");
+// ── Goals: stored in sc_goals Supabase table with 'data' JSONB column
+// Table schema needed: id TEXT PRIMARY KEY, data JSONB
+// Run this in Supabase SQL editor:
+// CREATE TABLE IF NOT EXISTS sc_goals (id TEXT PRIMARY KEY, data JSONB);
 
-function readGoals() {
-  try {
-    if (fs.existsSync(GOALS_FILE)) {
-      return JSON.parse(fs.readFileSync(GOALS_FILE, "utf8"));
-    }
-  } catch(e) { console.error("readGoals error:", e.message); }
-  return [];
+async function sbGoalsGet() {
+  const r = await fetch(SUPABASE_URL + "/rest/v1/sc_goals?select=id,data", {
+    headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
+  });
+  const rows = await r.json();
+  if (!r.ok) throw new Error(JSON.stringify(rows));
+  // Unwrap: return array of goal objects (stored in data column)
+  return rows.map(row => ({ ...row.data, id: row.id }));
 }
 
-function writeGoals(goals) {
-  fs.writeFileSync(GOALS_FILE, JSON.stringify(goals, null, 2));
+async function sbGoalPost(goal) {
+  const row = { id: goal.id, data: goal };
+  const r = await fetch(SUPABASE_URL + "/rest/v1/sc_goals", {
+    method: "POST",
+    headers: {
+      "apikey": SUPABASE_KEY,
+      "Authorization": "Bearer " + SUPABASE_KEY,
+      "Content-Type": "application/json",
+      "Prefer": "resolution=merge-duplicates,return=representation"
+    },
+    body: JSON.stringify(row)
+  });
+  const result = await r.json();
+  if (!r.ok) throw new Error(JSON.stringify(result));
+  return goal;
 }
 
-app.get("/goals", function(req, res) {
+async function sbGoalDelete(id) {
+  const r = await fetch(SUPABASE_URL + "/rest/v1/sc_goals?id=eq." + id, {
+    method: "DELETE",
+    headers: { "apikey": SUPABASE_KEY, "Authorization": "Bearer " + SUPABASE_KEY }
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(JSON.stringify(err));
+  }
+}
+
+app.get("/goals", async function(req, res) {
   try {
-    const goals = readGoals();
-    console.log("GET /goals returning", goals.length, "goals");
+    const goals = await sbGoalsGet();
     res.json(goals);
   } catch(e) {
     console.error("GET goals error:", e.message);
@@ -267,34 +293,28 @@ app.get("/goals", function(req, res) {
   }
 });
 
-app.get("/goals/test-columns", function(req, res) {
-  const goals = readGoals();
-  res.json({ storage: "file", goalsFile: GOALS_FILE, count: goals.length, goals: goals });
+app.get("/goals/test-columns", async function(req, res) {
+  try {
+    const goals = await sbGoalsGet();
+    res.json({ storage: "supabase", count: goals.length, goals: goals });
+  } catch(e) {
+    res.json({ error: e.message, hint: "Run in Supabase SQL editor: CREATE TABLE IF NOT EXISTS sc_goals (id TEXT PRIMARY KEY, data JSONB);" });
+  }
 });
 
-app.post("/goals", function(req, res) {
+app.post("/goals", async function(req, res) {
   try {
-    const goals = readGoals();
-    const newGoal = req.body;
-    console.log("POST /goals saving:", JSON.stringify(newGoal));
-    // Remove any existing goal with same id
-    const filtered = goals.filter(g => g.id !== newGoal.id);
-    filtered.push(newGoal);
-    writeGoals(filtered);
-    console.log("Goal saved. Total goals:", filtered.length);
-    res.json(newGoal);
+    const goal = await sbGoalPost(req.body);
+    res.json(goal);
   } catch(e) {
     console.error("POST goals error:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
-app.delete("/goals/:id", function(req, res) {
+app.delete("/goals/:id", async function(req, res) {
   try {
-    const goals = readGoals();
-    const filtered = goals.filter(g => g.id !== req.params.id);
-    writeGoals(filtered);
-    console.log("Goal deleted:", req.params.id, "Remaining:", filtered.length);
+    await sbGoalDelete(req.params.id);
     res.json({ ok: true });
   } catch(e) {
     console.error("DELETE goal error:", e.message);
