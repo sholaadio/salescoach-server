@@ -245,6 +245,45 @@ app.get("/goals", async function(req, res) {
   catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Debug: test what columns Supabase actually accepts
+app.get("/goals/test-columns", async function(req, res) {
+  try {
+    // First fetch one row to see actual column names
+    const existing = await sb("sc_goals?select=*&limit=1");
+    // Try inserting a minimal test goal with ALL possible column name variants
+    const testGoal = {
+      id: "test-" + Date.now(),
+      month: "2026-03",
+      type: "delivered",
+      target: 1,
+      label: "TEST - DELETE ME",
+      setBy: "test",
+      createdAt: Date.now(),
+      userId: "test-user",
+    };
+    const raw = await fetch(process.env.SUPABASE_URL + "/rest/v1/sc_goals", {
+      method: "POST",
+      headers: {
+        "apikey": process.env.SUPABASE_SERVICE_KEY,
+        "Authorization": "Bearer " + process.env.SUPABASE_SERVICE_KEY,
+        "Content-Type": "application/json",
+        "Prefer": "return=representation"
+      },
+      body: JSON.stringify(testGoal)
+    });
+    const rawData = await raw.json();
+    res.json({
+      status: raw.status,
+      ok: raw.ok,
+      existingSample: existing,
+      testInsertResponse: rawData,
+      testGoalSent: testGoal
+    });
+  } catch(e) {
+    res.json({ error: e.message });
+  }
+});
+
 app.post("/goals", async function(req, res) {
   try {
     console.log("Saving goal:", JSON.stringify(req.body));
