@@ -2353,24 +2353,26 @@ function GoalProgress(props) {
   }
 }
 
-// ── GoalTrackerPanel: shown in TeamLead + Management — full tracking view
+// ── GoalTrackerPanel: shown in TeamLead + Management — segmented view
 function GoalTrackerPanel(props) {
   var user = props.user, users = props.users, teams = props.teams, allLogs = props.allLogs, goals = props.goals, scope = props.scope;
   var thisMonth = props.viewMonth || localMonthStr(new Date());
   var myTeamId = user.teamId;
+  var isTeamLead = user.role === "teamlead";
   var allClosers = Object.values(users).filter(function(u) { return u.role === "closer"; });
-
-  // Accept goals from this month OR goals where month is close (handles UTC offset edge cases)
   var allThisMonth = goals.filter(function(g) { return g && g.month && g.month.slice(0,7) === thisMonth.slice(0,7); });
 
+  // For Team Lead: own team members + team goals (all teams) + company goals
+  // For Management: everything
   var visibleGoals = allThisMonth.filter(function(g) {
     var gUserId = g.userId || "";
     if (gUserId === "company") return true;
-    if (scope === "team") {
+    if (isTeamLead) {
+      // TL sees: goals they set + goals for their members + ALL team goals (for inspiration) + company goals
+      if (gUserId.indexOf("team:") === 0) return true; // ALL team goals visible to TL
       if (g.setBy === user.id) return true;
-      if (gUserId === "team:" + myTeamId) return true;
       var u = users[gUserId];
-      return u && u.teamId === myTeamId;
+      return u && u.teamId === myTeamId; // only own team members
     }
     return true; // management sees all
   });
@@ -2390,61 +2392,148 @@ function GoalTrackerPanel(props) {
     return current;
   };
 
-  var getGoalLabel = function(g) {
-    var gUserId = g.userId || "";
-    if (gUserId === "company") return "🏢 Company";
-    if (gUserId.indexOf("team:") === 0) {
-      var tId = gUserId.replace("team:", "");
-      return "👥 " + (teams[tId] ? teams[tId].name : tId);
-    }
-    return "👤 " + (users[gUserId] ? users[gUserId].name : gUserId);
-  };
-
   var canDelete = function(g) {
     return g.setBy === user.id || user.role === "ceo" || user.role === "gm";
   };
+
+  // Single goal card
+  var GoalCard = function(g) {
+    var current = computeCurrent(g);
+    var setByName = users[g.setBy] ? users[g.setBy].name.split(" ").slice(0,2).join(" ") : "Manager";
+    var typeIcon = { delivered:"📦", conversion:"📈", calls:"🎙️", upsells:"⚡", earnings:"💰" }[g.type] || "🎯";
+    return React.createElement("div", { key: g.id, style: { background: "rgba(255,255,255,0.02)", border: "1px solid " + C.border, borderRadius: 10, padding: "14px 16px", marginBottom: 10 } },
+      React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 } },
+        React.createElement("div", null,
+          React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 3 } }, g.label),
+          React.createElement("div", { style: { fontSize: 10, color: C.muted } }, typeIcon + " " + ({ delivered:"Orders Delivered", conversion:"Conversion %", calls:"Calls Logged", upsells:"Upsells", earnings:"Commission ₦" }[g.type] || g.type) + "  ·  Set by " + setByName)
+        ),
+        canDelete(g) && React.createElement("button", {
+          onClick: function() {
+            if (!window.confirm("Remove this goal?")) return;
+            fetch(SERVER + "/goals/" + g.id, { method: "DELETE" })
+              .then(function() { if (props.onDelete) props.onDelete(); });
+          },
+          style: { background: "transparent", border: "none", color: C.red, cursor: "pointer", fontSize: 11, flexShrink: 0, marginLeft: 8 }
+        }, "✕ Remove")
+      ),
+      React.createElement(GoalBar, { g: g, current: current })
+    );
+  };
+
+  // Section header
+  var SectionHeader = function(icon, title, count, accentColor) {
+    return React.createElement("div", { style: { display: "flex", alignItems: "center", gap: 8, marginTop: 24, marginBottom: 12, paddingBottom: 8, borderBottom: "1px solid " + C.border } },
+      React.createElement("div", { style: { fontSize: 16 } }, icon),
+      React.createElement("div", { style: { fontSize: 13, fontWeight: 800, color: accentColor || C.text } }, title),
+      React.createElement("div", { style: { marginLeft: "auto", fontSize: 11, color: C.muted, background: "rgba(255,255,255,0.05)", borderRadius: 20, padding: "2px 10px" } }, count + " goal" + (count !== 1 ? "s" : ""))
+    );
+  };
+
+  // Split goals into segments
+  var companyGoals = visibleGoals.filter(function(g) { return (g.userId||"") === "company"; });
+
+  // Get all teams visible
+  var visibleTeamIds = [];
+  visibleGoals.forEach(function(g) {
+    var gUserId = g.userId || "";
+    if (gUserId.indexOf("team:") === 0) {
+      var tId = gUserId.replace("team:", "");
+      if (visibleTeamIds.indexOf(tId) === -1) visibleTeamIds.push(tId);
+    }
+  });
+  // Sort teams
+  visibleTeamIds.sort(function(a, b) {
+    var na = teams[a] ? teams[a].name : a;
+    var nb = teams[b] ? teams[b].name : b;
+    return na.localeCompare(nb);
+  });
+
+  // Get all teams that have individual member goals
+  var teamsWithMemberGoals = [];
+  visibleGoals.forEach(function(g) {
+    var gUserId = g.userId || "";
+    if (gUserId !== "company" && gUserId.indexOf("team:") !== 0 && gUserId) {
+      var u = users[gUserId];
+      if (u && u.teamId) {
+        // For TL: only show their own team members
+        if (isTeamLead && u.teamId !== myTeamId) return;
+        if (teamsWithMemberGoals.indexOf(u.teamId) === -1) {
+          teamsWithMemberGoals.push(u.teamId);
+        }
+      }
+    }
+  });
+  teamsWithMemberGoals.sort(function(a,b) {
+    var na = teams[a] ? teams[a].name : a;
+    var nb = teams[b] ? teams[b].name : b;
+    return na.localeCompare(nb);
+  });
 
   if (visibleGoals.length === 0) {
     return React.createElement("div", { style: { background: C.card, border: "1px solid " + C.border, borderRadius: 8, padding: "32px", textAlign: "center", color: C.muted, marginBottom: 20 } },
       React.createElement("div", { style: { fontSize: 24, marginBottom: 8 } }, "🎯"),
       React.createElement("div", { style: { fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 } }, "No goals set for " + thisMonth),
-      React.createElement("div", { style: { fontSize: 12, marginBottom: 8 } }, "Set a goal below — it will appear here and on your team members' dashboards"),
-      React.createElement("div", { style: { fontSize: 10, color: C.muted, marginTop: 8 } },
-        "Debug: " + goals.length + " total goals in DB" +
-        (goals.length > 0 ? " | Months: " + [...new Set(goals.map(function(g){return g.month;}))].join(", ") : "") +
-        (goals.length > 0 ? " | userIds: " + goals.map(function(g){return g.userId;}).join(", ") : "") +
-        " | thisMonth=" + thisMonth + " | myTeamId=" + myTeamId
-      )
+      React.createElement("div", { style: { fontSize: 12 } }, "Set a goal below — it will appear here and on team members' dashboards")
     );
   }
 
   return React.createElement("div", { style: { marginBottom: 20 } },
-    visibleGoals.map(function(g) {
-      var current = computeCurrent(g);
-      var setByName = users[g.setBy] ? users[g.setBy].name : "Manager";
-      var scopeLabel = getGoalLabel(g);
-      return React.createElement("div", { key: g.id, style: { background: C.card, border: "1px solid " + C.border, borderRadius: 10, padding: "16px", marginBottom: 12 } },
-        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 } },
-          React.createElement("div", null,
-            React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.text } }, g.label),
-            React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 4, flexWrap: "wrap" } },
-              React.createElement("span", { style: S.pill(C.blue) }, scopeLabel),
-              React.createElement("span", { style: S.pill(C.muted) }, { delivered:"📦 Delivered", conversion:"📈 Conversion %", calls:"🎙️ Calls", upsells:"⚡ Upsells", earnings:"💰 Earnings" }[g.type] || g.type),
-              React.createElement("span", { style: { fontSize: 10, color: C.muted } }, "Set by " + setByName)
-            )
+
+    // ── COMPANY TARGET
+    companyGoals.length > 0 && React.createElement("div", null,
+      SectionHeader("🏢", "Company Target for " + thisMonth, companyGoals.length, C.orange),
+      companyGoals.map(function(g) { return GoalCard(g); })
+    ),
+
+    // ── TEAM GOALS (all teams visible — TL can see all for inspiration)
+    visibleTeamIds.length > 0 && React.createElement("div", null,
+      SectionHeader("👥", "Team Goals", visibleTeamIds.reduce(function(n,tId) {
+        return n + visibleGoals.filter(function(g) { return (g.userId||"") === "team:" + tId; }).length;
+      }, 0), C.purple),
+      visibleTeamIds.map(function(tId) {
+        var teamGoals = visibleGoals.filter(function(g) { return (g.userId||"") === "team:" + tId; });
+        if (teamGoals.length === 0) return null;
+        var teamName = teams[tId] ? teams[tId].name : tId;
+        var isMyTeam = tId === myTeamId;
+        return React.createElement("div", { key: tId, style: { marginBottom: 16 } },
+          React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: isMyTeam ? C.green : C.soft, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 } },
+            teamName,
+            isMyTeam && React.createElement("span", { style: { fontSize: 10, color: C.green, fontWeight: 400 } }, "· Your team")
           ),
-          canDelete(g) && React.createElement("button", {
-            onClick: function() {
-              if (!window.confirm("Remove this goal?")) return;
-              fetch(SERVER + "/goals/" + g.id, { method: "DELETE" })
-                .then(function() { if (props.onDelete) props.onDelete(); });
-            },
-            style: { background: "rgba(255,107,107,0.1)", border: "1px solid rgba(255,107,107,0.2)", borderRadius: 6, padding: "4px 10px", color: C.red, cursor: "pointer", fontSize: 11 }
-          }, "✕ Remove")
-        ),
-        React.createElement(GoalBar, { g: g, current: current })
-      );
-    })
+          teamGoals.map(function(g) { return GoalCard(g); })
+        );
+      })
+    ),
+
+    // ── TEAM MEMBER GOALS (per team)
+    teamsWithMemberGoals.length > 0 && React.createElement("div", null,
+      SectionHeader("👤", "Individual Member Goals", visibleGoals.filter(function(g) {
+        var gId = g.userId || "";
+        return gId !== "company" && gId.indexOf("team:") !== 0 && gId;
+      }).length, C.blue),
+      teamsWithMemberGoals.map(function(tId) {
+        var memberGoals = visibleGoals.filter(function(g) {
+          var gId = g.userId || "";
+          if (gId === "company" || gId.indexOf("team:") === 0) return false;
+          var u = users[gId];
+          return u && u.teamId === tId;
+        });
+        if (memberGoals.length === 0) return null;
+        var teamName = teams[tId] ? teams[tId].name : tId;
+        return React.createElement("div", { key: tId, style: { marginBottom: 16 } },
+          React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: C.soft, marginBottom: 8 } }, teamName + " Members"),
+          memberGoals.map(function(g) {
+            var targetUser = users[g.userId];
+            return React.createElement("div", { key: g.id },
+              React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 4, marginLeft: 2 } },
+                "👤 " + (targetUser ? targetUser.name : g.userId)
+              ),
+              GoalCard(g)
+            );
+          })
+        );
+      })
+    )
   );
 }
 
