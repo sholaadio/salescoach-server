@@ -33,7 +33,12 @@ const sb = async (path, method, body) => {
   };
   if (body) opts.body = JSON.stringify(body);
   const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, opts);
-  return r.json();
+  const data = await r.json();
+  if (!r.ok) {
+    console.error("Supabase error:", r.status, JSON.stringify(data));
+    throw new Error(data.message || data.error || ("Supabase error " + r.status));
+  }
+  return data;
 };
 
 // Detect file format from magic bytes (first few bytes of file)
@@ -241,8 +246,15 @@ app.get("/goals", async function(req, res) {
 });
 
 app.post("/goals", async function(req, res) {
-  try { res.json(await sb("sc_goals", "POST", req.body)); }
-  catch(e) { res.status(500).json({ error: e.message }); }
+  try {
+    console.log("Saving goal:", JSON.stringify(req.body));
+    const result = await sb("sc_goals", "POST", req.body);
+    console.log("Goal saved:", JSON.stringify(result));
+    res.json(result);
+  } catch(e) {
+    console.error("Goal save error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.delete("/goals/:id", async function(req, res) {
