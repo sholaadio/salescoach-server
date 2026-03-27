@@ -240,65 +240,66 @@ app.delete("/noanswers/:id", async function(req, res) {
   catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-app.get("/goals", async function(req, res) {
-  try { res.json(await sb("sc_goals?select=*")); }
-  catch(e) { res.status(500).json({ error: e.message }); }
-});
+// ── Goals stored as JSON file (bypasses Supabase schema issues)
+const GOALS_FILE = path.join(__dirname, "goals_data.json");
 
-// Debug: test what columns Supabase actually accepts
-app.get("/goals/test-columns", async function(req, res) {
+function readGoals() {
   try {
-    // First fetch one row to see actual column names
-    const existing = await sb("sc_goals?select=*&limit=1");
-    // Try inserting a minimal test goal with ALL possible column name variants
-    const testGoal = {
-      id: "test-" + Date.now(),
-      month: "2026-03",
-      type: "delivered",
-      target: 1,
-      label: "TEST - DELETE ME",
-      setBy: "test",
-      createdAt: Date.now(),
-      userId: "test-user",
-    };
-    const raw = await fetch(process.env.SUPABASE_URL + "/rest/v1/sc_goals", {
-      method: "POST",
-      headers: {
-        "apikey": process.env.SUPABASE_SERVICE_KEY,
-        "Authorization": "Bearer " + process.env.SUPABASE_SERVICE_KEY,
-        "Content-Type": "application/json",
-        "Prefer": "return=representation"
-      },
-      body: JSON.stringify(testGoal)
-    });
-    const rawData = await raw.json();
-    res.json({
-      status: raw.status,
-      ok: raw.ok,
-      existingSample: existing,
-      testInsertResponse: rawData,
-      testGoalSent: testGoal
-    });
-  } catch(e) {
-    res.json({ error: e.message });
-  }
-});
+    if (fs.existsSync(GOALS_FILE)) {
+      return JSON.parse(fs.readFileSync(GOALS_FILE, "utf8"));
+    }
+  } catch(e) { console.error("readGoals error:", e.message); }
+  return [];
+}
 
-app.post("/goals", async function(req, res) {
+function writeGoals(goals) {
+  fs.writeFileSync(GOALS_FILE, JSON.stringify(goals, null, 2));
+}
+
+app.get("/goals", function(req, res) {
   try {
-    console.log("Saving goal:", JSON.stringify(req.body));
-    const result = await sb("sc_goals", "POST", req.body);
-    console.log("Goal saved:", JSON.stringify(result));
-    res.json(result);
+    const goals = readGoals();
+    console.log("GET /goals returning", goals.length, "goals");
+    res.json(goals);
   } catch(e) {
-    console.error("Goal save error:", e.message);
+    console.error("GET goals error:", e.message);
     res.status(500).json({ error: e.message });
   }
 });
 
-app.delete("/goals/:id", async function(req, res) {
-  try { await sb("sc_goals?id=eq." + req.params.id, "DELETE"); res.json({ ok: true }); }
-  catch(e) { res.status(500).json({ error: e.message }); }
+app.get("/goals/test-columns", function(req, res) {
+  const goals = readGoals();
+  res.json({ storage: "file", goalsFile: GOALS_FILE, count: goals.length, goals: goals });
+});
+
+app.post("/goals", function(req, res) {
+  try {
+    const goals = readGoals();
+    const newGoal = req.body;
+    console.log("POST /goals saving:", JSON.stringify(newGoal));
+    // Remove any existing goal with same id
+    const filtered = goals.filter(g => g.id !== newGoal.id);
+    filtered.push(newGoal);
+    writeGoals(filtered);
+    console.log("Goal saved. Total goals:", filtered.length);
+    res.json(newGoal);
+  } catch(e) {
+    console.error("POST goals error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.delete("/goals/:id", function(req, res) {
+  try {
+    const goals = readGoals();
+    const filtered = goals.filter(g => g.id !== req.params.id);
+    writeGoals(filtered);
+    console.log("Goal deleted:", req.params.id, "Remaining:", filtered.length);
+    res.json({ ok: true });
+  } catch(e) {
+    console.error("DELETE goal error:", e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // Convert audio buffer to MP3 using ffmpeg
