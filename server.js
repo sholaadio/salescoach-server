@@ -3,6 +3,11 @@ const cors = require("cors");
 const multer = require("multer");
 const fetch = require("node-fetch");
 const FormData = require("form-data");
+const { execFile } = require("child_process");
+const fs = require("fs");
+const path = require("path");
+const os = require("os");
+const ffmpegPath = require("ffmpeg-static");
 
 const app = express();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
@@ -69,9 +74,9 @@ function getWhisperFileInfo(originalname, mimetype, buffer) {
       "wav":  { filename: "recording.wav",  contentType: "audio/wav" },
       "ogg":  { filename: "recording.ogg",  contentType: "audio/ogg" },
       "flac": { filename: "recording.flac", contentType: "audio/flac" },
-      "mp4":  { filename: "recording.mp4",  contentType: "video/mp4" },
+      "mp4":  { filename: "recording.m4a",  contentType: "audio/mp4" },
       "webm": { filename: "recording.webm", contentType: "audio/webm" },
-      "amr":  { filename: "recording.mp4",  contentType: "video/mp4" },
+      "amr":  { filename: "recording.m4a",  contentType: "audio/mp4" },
       "aac":  { filename: "recording.m4a",  contentType: "audio/mp4" },
     };
     if (magicMap[detected]) return magicMap[detected];
@@ -96,29 +101,29 @@ function getWhisperFileInfo(originalname, mimetype, buffer) {
     "audio/x-flac":      { filename: "recording.flac", contentType: "audio/flac" },
     "audio/webm":        { filename: "recording.webm", contentType: "audio/webm" },
     "video/webm":        { filename: "recording.webm", contentType: "audio/webm" },
-    "video/mp4":         { filename: "recording.mp4",  contentType: "video/mp4" },
+    "video/mp4":         { filename: "recording.m4a",  contentType: "audio/mp4" },
     "audio/opus":        { filename: "recording.ogg",  contentType: "audio/ogg" },
     // 3GPP — send as mp4, Whisper handles it
-    "audio/3gpp":        { filename: "recording.mp4",  contentType: "video/mp4" },
-    "audio/3gpp2":       { filename: "recording.mp4",  contentType: "video/mp4" },
-    "video/3gpp":        { filename: "recording.mp4",  contentType: "video/mp4" },
-    "video/3gpp2":       { filename: "recording.mp4",  contentType: "video/mp4" },
+    "audio/3gpp":        { filename: "recording.m4a",  contentType: "audio/mp4" },
+    "audio/3gpp2":       { filename: "recording.m4a",  contentType: "audio/mp4" },
+    "video/3gpp":        { filename: "recording.m4a",  contentType: "audio/mp4" },
+    "video/3gpp2":       { filename: "recording.m4a",  contentType: "audio/mp4" },
     // AAC — send as m4a
     "audio/aac":         { filename: "recording.m4a",  contentType: "audio/mp4" },
     "audio/x-aac":       { filename: "recording.m4a",  contentType: "audio/mp4" },
     // AMR — send as mp4 (best available without ffmpeg)
-    "audio/amr":         { filename: "recording.mp4",  contentType: "video/mp4" },
-    "audio/amr-wb":      { filename: "recording.mp4",  contentType: "video/mp4" },
+    "audio/amr":         { filename: "recording.m4a",  contentType: "audio/mp4" },
+    "audio/amr-wb":      { filename: "recording.m4a",  contentType: "audio/mp4" },
     // WMA — send as mp4
-    "audio/x-ms-wma":    { filename: "recording.mp4",  contentType: "video/mp4" },
-    "audio/wma":         { filename: "recording.mp4",  contentType: "video/mp4" },
+    "audio/x-ms-wma":    { filename: "recording.m4a",  contentType: "audio/mp4" },
+    "audio/wma":         { filename: "recording.m4a",  contentType: "audio/mp4" },
   };
 
   // Extension fallback map (in case browser sends wrong/missing MIME)
   const extMap = {
     "mp3":  { filename: "recording.mp3",  contentType: "audio/mpeg" },
     "m4a":  { filename: "recording.m4a",  contentType: "audio/mp4" },
-    "mp4":  { filename: "recording.mp4",  contentType: "video/mp4" },
+    "mp4":  { filename: "recording.m4a",  contentType: "audio/mp4" },
     "wav":  { filename: "recording.wav",  contentType: "audio/wav" },
     "ogg":  { filename: "recording.ogg",  contentType: "audio/ogg" },
     "oga":  { filename: "recording.oga",  contentType: "audio/ogg" },
@@ -126,11 +131,11 @@ function getWhisperFileInfo(originalname, mimetype, buffer) {
     "webm": { filename: "recording.webm", contentType: "audio/webm" },
     "opus": { filename: "recording.ogg",  contentType: "audio/ogg" },
     "aac":  { filename: "recording.m4a",  contentType: "audio/mp4" },
-    "3gp":  { filename: "recording.mp4",  contentType: "video/mp4" },
-    "3gpp": { filename: "recording.mp4",  contentType: "video/mp4" },
-    "3g2":  { filename: "recording.mp4",  contentType: "video/mp4" },
-    "amr":  { filename: "recording.mp4",  contentType: "video/mp4" },
-    "wma":  { filename: "recording.mp4",  contentType: "video/mp4" },
+    "3gp":  { filename: "recording.m4a",  contentType: "audio/mp4" },
+    "3gpp": { filename: "recording.m4a",  contentType: "audio/mp4" },
+    "3g2":  { filename: "recording.m4a",  contentType: "audio/mp4" },
+    "amr":  { filename: "recording.m4a",  contentType: "audio/mp4" },
+    "wma":  { filename: "recording.m4a",  contentType: "audio/mp4" },
     "caf":  { filename: "recording.m4a",  contentType: "audio/mp4" },
     "aiff": { filename: "recording.wav",  contentType: "audio/wav" },
     "aif":  { filename: "recording.wav",  contentType: "audio/wav" },
@@ -143,7 +148,7 @@ function getWhisperFileInfo(originalname, mimetype, buffer) {
   if (ext && extMap[ext]) return extMap[ext];
 
   // Default: treat as mp4 (most universal for Whisper)
-  return { filename: "recording.mp4", contentType: "video/mp4" };
+  return { filename: "recording.m4a", contentType: "audio/mp4" };
 }
 
 app.get("/", function(req, res) {
@@ -240,19 +245,83 @@ app.post("/goals", async function(req, res) {
   catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Convert audio buffer to MP3 using ffmpeg
+function convertToMp3(inputBuffer, inputExt) {
+  return new Promise(function(resolve, reject) {
+    const tmpDir = os.tmpdir();
+    const inputPath = path.join(tmpDir, "sc_input_" + Date.now() + "." + (inputExt || "tmp"));
+    const outputPath = path.join(tmpDir, "sc_output_" + Date.now() + ".mp3");
+    fs.writeFileSync(inputPath, inputBuffer);
+    execFile(ffmpegPath, [
+      "-y",
+      "-i", inputPath,
+      "-vn",
+      "-ar", "16000",
+      "-ac", "1",
+      "-b:a", "64k",
+      outputPath
+    ], function(err, stdout, stderr) {
+      try { fs.unlinkSync(inputPath); } catch(e) {}
+      if (err) {
+        try { fs.unlinkSync(outputPath); } catch(e) {}
+        return reject(new Error("ffmpeg conversion failed: " + stderr));
+      }
+      const mp3Buffer = fs.readFileSync(outputPath);
+      try { fs.unlinkSync(outputPath); } catch(e) {}
+      resolve(mp3Buffer);
+    });
+  });
+}
+
+// Whisper-native formats that don't need conversion
+const WHISPER_NATIVE = ["mp3","mp4","mpeg","mpga","m4a","wav","ogg","oga","flac","webm"];
+
+function needsConversion(originalname, mimetype) {
+  const ext = (originalname || "").toLowerCase().split(".").pop();
+  if (WHISPER_NATIVE.includes(ext)) return false;
+  const nativeMimes = [
+    "audio/mpeg","audio/mp3","audio/mp4","audio/x-m4a","audio/m4a",
+    "audio/wav","audio/x-wav","audio/ogg","audio/oga","audio/flac",
+    "audio/x-flac","audio/webm","video/webm","video/mp4"
+  ];
+  if (nativeMimes.includes(mimetype)) return false;
+  return true; // needs conversion
+}
+
 app.post("/transcribe", upload.single("audio"), async function(req, res) {
   try {
     if (!req.file) return res.status(400).json({ error: "No audio file." });
     if (!OPENAI_KEY) return res.status(500).json({ error: "OpenAI key missing." });
 
-    // Get correct filename/contentType for Whisper based on MIME type and extension
-    const fileInfo = getWhisperFileInfo(req.file.originalname, req.file.mimetype, req.file.buffer);
+    let audioBuffer = req.file.buffer;
+    let filename = "recording.mp3";
+    let contentType = "audio/mpeg";
+
+    // Check if file needs conversion
+    const shouldConvert = needsConversion(req.file.originalname, req.file.mimetype);
+
+    if (shouldConvert) {
+      // Get input extension for ffmpeg hint
+      const origExt = (req.file.originalname || "").toLowerCase().split(".").pop() || "3gpp";
+      try {
+        audioBuffer = await convertToMp3(req.file.buffer, origExt);
+        filename = "recording.mp3";
+        contentType = "audio/mpeg";
+      } catch(convErr) {
+        // ffmpeg not available or failed — try sending as m4a (may work for some formats)
+        console.error("ffmpeg conversion failed, trying direct:", convErr.message);
+        const fileInfo = getWhisperFileInfo(req.file.originalname, req.file.mimetype, req.file.buffer);
+        filename = fileInfo.filename;
+        contentType = fileInfo.contentType;
+      }
+    } else {
+      const fileInfo = getWhisperFileInfo(req.file.originalname, req.file.mimetype, req.file.buffer);
+      filename = fileInfo.filename;
+      contentType = fileInfo.contentType;
+    }
 
     const form = new FormData();
-    form.append("file", req.file.buffer, {
-      filename: fileInfo.filename,
-      contentType: fileInfo.contentType
-    });
+    form.append("file", audioBuffer, { filename, contentType });
     form.append("model", "whisper-1");
     form.append("prompt", "Nigerian sales call. May contain English, Pidgin, Yoruba, Igbo, or Hausa.");
 
