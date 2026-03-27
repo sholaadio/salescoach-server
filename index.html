@@ -1497,8 +1497,12 @@ function TeamLeadPortal({ user, users, teams, allReports, allLogs, allNoAnswers,
       scopeLabel: users[summaryTarget].name
     }
   ) : null), tab === "attendance" && /* @__PURE__ */ React.createElement(AttendanceTab, { user, users, teams, allLogs, scope: "team" }), tab === "goals" && /* @__PURE__ */ React.createElement(GoalSettingPanel, { user, users, teams, allLogs, goals: goals || [], onSaveGoal: async (g) => {
-    await saveGoal_api(g);
-    await refresh();
+    try {
+      await saveGoal_api(g);
+      await refresh();
+    } catch(e) {
+      flash("❌ Error: " + e.message);
+    }
   }, onDeleteGoal: async () => { await refresh(); }, flash })
       )
     ),
@@ -1929,8 +1933,12 @@ function ManagementDashboard({ user, users, teams, allReports, allLogs, allNoAns
       return "\u2022\u2022\u2022\u2022";
     })()), /* @__PURE__ */ React.createElement("td", { style: S.td }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } }, canEditName(u) && /* @__PURE__ */ React.createElement(EditNameInline, { uid: u.id, currentName: u.name, users, saveUsersData, refresh, flash }), canRemove(u) && /* @__PURE__ */ React.createElement("button", { onClick: () => removeUser(u.id), style: { ...S.btnDanger, padding: "6px 14px", fontSize: 13 } }, "Remove"))));
   }))))), tab === "commreport" && /* @__PURE__ */ React.createElement(CommissionReport, { users, teams, allLogs }), tab === "attendance" && /* @__PURE__ */ React.createElement(AttendanceTab, { user, users, teams, allLogs, scope: "company" }), tab === "goals" && /* @__PURE__ */ React.createElement(GoalSettingPanel, { user, users, teams, allLogs, goals: goals || [], onSaveGoal: async (g) => {
-    await saveGoal_api(g);
-    await refresh();
+    try {
+      await saveGoal_api(g);
+      await refresh();
+    } catch(e) {
+      flash("❌ Error: " + e.message);
+    }
   }, onDeleteGoal: async () => { await refresh(); }, flash }), tab === "roles" && (perms.manageRoles || perms.resetPins) && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(PinResetPanel, { user, users, saveUsersData, refresh, flash }), perms.manageRoles && /* @__PURE__ */ React.createElement(PermissionsPanel, { users, saveUsersData, refresh, flash })), tab === "summary" && perms.generateSummary && /* @__PURE__ */ React.createElement(ManagementSummaryTab, { user, users, allReports, allLogs, teams })
       )
     ),
@@ -2216,11 +2224,16 @@ async function getGoals() {
   }
 }
 async function saveGoal_api(g) {
-  try {
-    await apiPost("goals", g);
-  } catch (e) {
-    console.error(e);
+  const r = await fetchWithTimeout(SERVER + "/goals", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(g)
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.error || "Failed to save goal");
   }
+  return r.json();
 }
 // ── Goal helper: compute current progress for a user
 // ── Compute actual progress for a single user toward a goal
