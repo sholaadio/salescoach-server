@@ -2217,9 +2217,12 @@ function AttendanceTab({ user, users, teams, allLogs, scope }) {
 }
 async function getGoals() {
   try {
-    const a = await apiGet("goals");
+    const r = await fetch(SERVER + "/goals");
+    const a = await r.json();
+    console.log("Goals fetched:", JSON.stringify(a).slice(0, 500));
     return Array.isArray(a) ? a : [];
   } catch (e) {
+    console.error("getGoals error:", e);
     return [];
   }
 }
@@ -2351,8 +2354,8 @@ function GoalTrackerPanel(props) {
   var myTeamId = user.teamId;
   var allClosers = Object.values(users).filter(function(u) { return u.role === "closer"; });
 
-  // Debug: show all goals and their raw userId for troubleshooting
-  var allThisMonth = goals.filter(function(g) { return g && g.month === thisMonth; });
+  // Accept goals from this month OR goals where month is close (handles UTC offset edge cases)
+  var allThisMonth = goals.filter(function(g) { return g && g.month && g.month.slice(0,7) === thisMonth.slice(0,7); });
 
   var visibleGoals = allThisMonth.filter(function(g) {
     var gUserId = g.userId || "";
@@ -2399,9 +2402,12 @@ function GoalTrackerPanel(props) {
     return React.createElement("div", { style: { background: C.card, border: "1px solid " + C.border, borderRadius: 8, padding: "32px", textAlign: "center", color: C.muted, marginBottom: 20 } },
       React.createElement("div", { style: { fontSize: 24, marginBottom: 8 } }, "🎯"),
       React.createElement("div", { style: { fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 } }, "No goals set for " + thisMonth),
-      React.createElement("div", { style: { fontSize: 12 } }, "Set a goal below — it will appear here and on your team members' dashboards"),
-      allThisMonth.length > 0 && React.createElement("div", { style: { marginTop: 12, padding: "8px 12px", background: "rgba(249,115,22,0.08)", borderRadius: 8, fontSize: 11, color: C.orange } },
-        "ℹ️ " + allThisMonth.length + " goal(s) exist this month but are not visible in this scope"
+      React.createElement("div", { style: { fontSize: 12, marginBottom: 8 } }, "Set a goal below — it will appear here and on your team members' dashboards"),
+      React.createElement("div", { style: { fontSize: 10, color: C.muted, marginTop: 8 } },
+        "Debug: " + goals.length + " total goals in DB" +
+        (goals.length > 0 ? " | Months: " + [...new Set(goals.map(function(g){return g.month;}))].join(", ") : "") +
+        (goals.length > 0 ? " | userIds: " + goals.map(function(g){return g.userId;}).join(", ") : "") +
+        " | thisMonth=" + thisMonth + " | myTeamId=" + myTeamId
       )
     );
   }
