@@ -2281,14 +2281,14 @@ function GoalProgress(props) {
     var teamId = users[userId] ? users[userId].teamId : null;
     // Collect goals relevant to this user: personal + their team + company-wide
     var myGoals = goals.filter(function(g) {
-      if (!g || !g.month) return false;
-      if (g.month !== thisMonth) return false;
-      // Company goals: visible to everyone
-      if (g.scope === "company") return true;
-      // Individual goals: match on userId (handle null/undefined scope)
-      if (g.userId && g.userId === userId) return true;
-      // Team goals: match on teamId
-      if (g.teamId && g.teamId === teamId) return true;
+      if (!g || !g.month || g.month !== thisMonth) return false;
+      var gUserId = g.userId || "";
+      // Company goal: userId === "company"
+      if (gUserId === "company") return true;
+      // Team goal: userId === "team:teamId"
+      if (gUserId === "team:" + teamId) return true;
+      // Individual goal: userId === this user's id
+      if (gUserId === userId) return true;
       return false;
     });
     if (myGoals.length === 0) {
@@ -2309,23 +2309,19 @@ function GoalProgress(props) {
       myGoals.map(function(g) {
         var current = 0;
         var sublabel = "";
-        if (g.scope === "company") {
-          allClosers.forEach(function(c) {
-            var r = computeGoalProgress(g, c.id, allLogs, thisMonth);
-            current += r.current;
-          });
-          sublabel = "🏢 Company goal · Set by " + (users[g.setBy] ? users[g.setBy].name.split(" ")[0] : "manager");
-        } else if (g.teamId) {
-          var members = Object.values(users).filter(function(u) { return u.teamId === g.teamId && u.role === "closer"; });
-          members.forEach(function(m) {
-            var r = computeGoalProgress(g, m.id, allLogs, thisMonth);
-            current += r.current;
-          });
-          sublabel = "👥 Team goal · Set by " + (users[g.setBy] ? users[g.setBy].name.split(" ")[0] : "manager");
+        var gUserId = g.userId || "";
+        var setByName = users[g.setBy] ? users[g.setBy].name.split(" ")[0] : "manager";
+        if (gUserId === "company") {
+          allClosers.forEach(function(c) { current += computeGoalProgress(g, c.id, allLogs, thisMonth).current; });
+          sublabel = "🏢 Company goal · Set by " + setByName;
+        } else if (gUserId.indexOf("team:") === 0) {
+          var tId = gUserId.replace("team:","");
+          var members = Object.values(users).filter(function(u) { return u.teamId === tId && u.role === "closer"; });
+          members.forEach(function(m) { current += computeGoalProgress(g, m.id, allLogs, thisMonth).current; });
+          sublabel = "👥 Team goal · Set by " + setByName;
         } else {
-          var r = computeGoalProgress(g, userId, allLogs, thisMonth);
-          current = r.current;
-          sublabel = "👤 Personal goal · Set by " + (users[g.setBy] ? users[g.setBy].name.split(" ")[0] : "manager");
+          current = computeGoalProgress(g, userId, allLogs, thisMonth).current;
+          sublabel = "👤 Personal goal · Set by " + setByName;
         }
         return React.createElement(GoalBar, { key: g.id, g: g, current: current, sublabel: sublabel });
       })
@@ -2338,121 +2334,92 @@ function GoalProgress(props) {
 // ── GoalTrackerPanel: shown in TeamLead + Management — full tracking view
 function GoalTrackerPanel(props) {
   var user = props.user, users = props.users, teams = props.teams, allLogs = props.allLogs, goals = props.goals, scope = props.scope;
-  var now = new Date();
-  var thisMonth = props.viewMonth || localMonthStr(now);
-
+  var thisMonth = props.viewMonth || localMonthStr(new Date());
   var myTeamId = user.teamId;
-  var myMembers = Object.values(users).filter(function(u) {
-    if (scope === "team") return u.teamId === myTeamId && u.role === "closer";
-    return u.role === "closer";
-  });
   var allClosers = Object.values(users).filter(function(u) { return u.role === "closer"; });
 
-  // Filter goals visible in this scope
-  var visibleGoals = goals.filter(function(g) {
-    if (!g || !g.month || g.month !== thisMonth) return false;
-    if (g.scope === "company") return true;
+  // Debug: show all goals and their raw userId for troubleshooting
+  var allThisMonth = goals.filter(function(g) { return g && g.month === thisMonth; });
+
+  var visibleGoals = allThisMonth.filter(function(g) {
+    var gUserId = g.userId || "";
+    if (gUserId === "company") return true;
     if (scope === "team") {
-      if (g.setBy === user.id) return true;           // goals I set
-      if (g.teamId && g.teamId === myTeamId) return true; // team goals for my team
-      if (g.userId) {
-        var u = users[g.userId];
-        return u && u.teamId === myTeamId;             // individual goals for my members
-      }
-      return false;
+      if (g.setBy === user.id) return true;
+      if (gUserId === "team:" + myTeamId) return true;
+      var u = users[gUserId];
+      return u && u.teamId === myTeamId;
     }
-    return true;
+    return true; // management sees all
   });
 
-  var companyGoals = visibleGoals.filter(function(g) { return g.scope === "company"; });
-  var teamGoals    = visibleGoals.filter(function(g) { return g.teamId && !g.userId && g.scope !== "company"; });
-  var indivGoals   = visibleGoals.filter(function(g) { return g.userId && g.scope !== "company"; });
-
-  var SectionHead = function(props) {
-    return React.createElement("div", { style: { fontSize: 12, fontWeight: 800, color: C.muted, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 10, marginTop: 20 } }, props.label);
+  var computeCurrent = function(g) {
+    var gUserId = g.userId || "";
+    var current = 0;
+    if (gUserId === "company") {
+      allClosers.forEach(function(c) { current += computeGoalProgress(g, c.id, allLogs, thisMonth).current; });
+    } else if (gUserId.indexOf("team:") === 0) {
+      var tId = gUserId.replace("team:", "");
+      Object.values(users).filter(function(u) { return u.teamId === tId && u.role === "closer"; })
+        .forEach(function(m) { current += computeGoalProgress(g, m.id, allLogs, thisMonth).current; });
+    } else if (gUserId) {
+      current = computeGoalProgress(g, gUserId, allLogs, thisMonth).current;
+    }
+    return current;
   };
 
-  var renderGoalWithTracking = function(g, overrideProgress) {
-    var current = 0;
-    if (overrideProgress !== undefined) {
-      current = overrideProgress;
-    } else if (g.scope === "company") {
-      allClosers.forEach(function(c) {
-        current += computeGoalProgress(g, c.id, allLogs, thisMonth).current;
-      });
-    } else if (g.teamId && !g.userId) {
-      var tMembers = Object.values(users).filter(function(u) { return u.teamId === g.teamId && u.role === "closer"; });
-      tMembers.forEach(function(m) {
-        current += computeGoalProgress(g, m.id, allLogs, thisMonth).current;
-      });
-    } else if (g.userId) {
-      current = computeGoalProgress(g, g.userId, allLogs, thisMonth).current;
+  var getGoalLabel = function(g) {
+    var gUserId = g.userId || "";
+    if (gUserId === "company") return "🏢 Company";
+    if (gUserId.indexOf("team:") === 0) {
+      var tId = gUserId.replace("team:", "");
+      return "👥 " + (teams[tId] ? teams[tId].name : tId);
     }
-    var setByName = users[g.setBy] ? users[g.setBy].name.split(" ").slice(0,2).join(" ") : "Manager";
-    return React.createElement("div", { key: g.id, style: { background: "rgba(255,255,255,0.03)", border: "1px solid " + C.border, borderRadius: 10, padding: "14px 16px", marginBottom: 10 } },
-      React.createElement("div", { style: { fontSize: 11, color: C.muted, marginBottom: 6 } }, "Set by " + setByName),
-      React.createElement(GoalBar, { g: g, current: current })
-    );
+    return "👤 " + (users[gUserId] ? users[gUserId].name : gUserId);
+  };
+
+  var canDelete = function(g) {
+    return g.setBy === user.id || user.role === "ceo" || user.role === "gm";
   };
 
   if (visibleGoals.length === 0) {
-    return React.createElement("div", { style: { background: C.card, border: "1px solid " + C.border, borderRadius: 8, padding: "32px", textAlign: "center", color: C.muted } },
+    return React.createElement("div", { style: { background: C.card, border: "1px solid " + C.border, borderRadius: 8, padding: "32px", textAlign: "center", color: C.muted, marginBottom: 20 } },
       React.createElement("div", { style: { fontSize: 24, marginBottom: 8 } }, "🎯"),
-      React.createElement("div", { style: { fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 } }, "No goals set for this month"),
-      React.createElement("div", { style: { fontSize: 12 } }, "Use the Goal Setting panel below to add goals")
+      React.createElement("div", { style: { fontSize: 14, fontWeight: 600, color: C.text, marginBottom: 4 } }, "No goals set for " + thisMonth),
+      React.createElement("div", { style: { fontSize: 12 } }, "Set a goal below — it will appear here and on your team members' dashboards"),
+      allThisMonth.length > 0 && React.createElement("div", { style: { marginTop: 12, padding: "8px 12px", background: "rgba(249,115,22,0.08)", borderRadius: 8, fontSize: 11, color: C.orange } },
+        "ℹ️ " + allThisMonth.length + " goal(s) exist this month but are not visible in this scope"
+      )
     );
   }
 
-  return React.createElement("div", null,
-    companyGoals.length > 0 && React.createElement("div", null,
-      React.createElement(SectionHead, { label: "🏢 Company Goals" }),
-      companyGoals.map(function(g) { return renderGoalWithTracking(g); })
-    ),
-    teamGoals.length > 0 && React.createElement("div", null,
-      React.createElement(SectionHead, { label: "👥 Team Goals" }),
-      teamGoals.map(function(g) {
-        var teamName = teams[g.teamId] ? teams[g.teamId].name : "Team";
-        return React.createElement("div", { key: g.id },
-          React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 8, marginTop: 4 } }, teamName),
-          renderGoalWithTracking(g),
-          // Show per-member breakdown
-          React.createElement("div", { style: { paddingLeft: 12, borderLeft: "2px solid " + C.border } },
-            Object.values(users).filter(function(u) { return u.teamId === g.teamId && u.role === "closer"; }).map(function(m) {
-              var mCurrent = computeGoalProgress(g, m.id, allLogs, thisMonth).current;
-              var mPct = Math.min(Math.round(mCurrent / (g.target||1) * 100), 100);
-              var met = mCurrent >= g.target;
-              return React.createElement("div", { key: m.id, style: { display: "flex", alignItems: "center", gap: 10, padding: "5px 0", borderBottom: "1px solid rgba(255,255,255,0.03)" } },
-                React.createElement("div", { style: { width: 26, height: 26, borderRadius: "50%", background: "rgba(94,106,210,0.2)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, fontWeight: 800, color: "#5e6ad2", flexShrink: 0 } },
-                  m.name.split(" ").map(function(w) { return w[0]; }).join("").slice(0,2)
-                ),
-                React.createElement("div", { style: { flex: 1, minWidth: 0 } },
-                  React.createElement("div", { style: { fontSize: 11, fontWeight: 600, color: C.text, marginBottom: 2 } }, m.name.split(" ")[0]),
-                  React.createElement("div", { style: { height: 5, background: "rgba(255,255,255,0.06)", borderRadius: 999, overflow: "hidden" } },
-                    React.createElement("div", { style: { width: mPct + "%", height: "100%", background: met ? C.green : C.orange, borderRadius: 999 } })
-                  )
-                ),
-                React.createElement("div", { style: { fontSize: 11, fontWeight: 700, color: met ? C.green : C.muted, flexShrink: 0 } },
-                  g.type === "earnings" ? fmtNaira(mCurrent) : mCurrent, "/", g.type === "earnings" ? fmtNaira(g.target) : g.target
-                )
-              );
-            })
-          )
-        );
-      })
-    ),
-    indivGoals.length > 0 && React.createElement("div", null,
-      React.createElement(SectionHead, { label: "👤 Individual Goals" }),
-      indivGoals.map(function(g) {
-        var targetUser = users[g.userId];
-        if (!targetUser) return null;
-        return React.createElement("div", { key: g.id, style: { marginBottom: 10 } },
-          React.createElement("div", { style: { fontSize: 12, fontWeight: 700, color: C.text, marginBottom: 6 } },
-            targetUser.name, React.createElement("span", { style: { fontSize: 10, color: C.muted, marginLeft: 6 } }, teams[targetUser.teamId] ? teams[targetUser.teamId].name : "")
+  return React.createElement("div", { style: { marginBottom: 20 } },
+    visibleGoals.map(function(g) {
+      var current = computeCurrent(g);
+      var setByName = users[g.setBy] ? users[g.setBy].name : "Manager";
+      var scopeLabel = getGoalLabel(g);
+      return React.createElement("div", { key: g.id, style: { background: C.card, border: "1px solid " + C.border, borderRadius: 10, padding: "16px", marginBottom: 12 } },
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 10 } },
+          React.createElement("div", null,
+            React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.text } }, g.label),
+            React.createElement("div", { style: { display: "flex", gap: 8, marginTop: 4, flexWrap: "wrap" } },
+              React.createElement("span", { style: S.pill(C.blue) }, scopeLabel),
+              React.createElement("span", { style: S.pill(C.muted) }, { delivered:"📦 Delivered", conversion:"📈 Conversion %", calls:"🎙️ Calls", upsells:"⚡ Upsells", earnings:"💰 Earnings" }[g.type] || g.type),
+              React.createElement("span", { style: { fontSize: 10, color: C.muted } }, "Set by " + setByName)
+            )
           ),
-          renderGoalWithTracking(g)
-        );
-      })
-    )
+          canDelete(g) && React.createElement("button", {
+            onClick: function() {
+              if (!window.confirm("Remove this goal?")) return;
+              fetch(SERVER + "/goals/" + g.id, { method: "DELETE" })
+                .then(function() { if (props.onDelete) props.onDelete(); });
+            },
+            style: { background: "rgba(255,107,107,0.1)", border: "1px solid rgba(255,107,107,0.2)", borderRadius: 6, padding: "4px 10px", color: C.red, cursor: "pointer", fontSize: 11 }
+          }, "✕ Remove")
+        ),
+        React.createElement(GoalBar, { g: g, current: current })
+      );
+    })
   );
 }
 
@@ -2463,32 +2430,31 @@ function GoalSettingPanel(props) {
   var thisMonth = localMonthStr(now);
   var MONTHS_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
-  var [scope, setScope] = useState("individual"); // "company" | "team" | "individual"
+  var [scope, setScope] = useState("individual");
   var [selUser, setSelUser] = useState(null);
   var [selTeam, setSelTeam] = useState(null);
   var [goalType, setGoalType] = useState("delivered");
   var [target, setTarget] = useState("");
   var [label, setLabel] = useState("");
   var [saving, setSaving] = useState(false);
-  var [viewMonth, setViewMonth] = useState(localMonthStr(now));
+  var [viewMonth, setViewMonth] = useState(thisMonth);
 
-  var isCeo     = user.role === "ceo";
-  var isGm      = user.role === "gm";
+  var isCeo = user.role === "ceo";
+  var isGm = user.role === "gm";
   var isHeadSales = user.role === "head_sales";
-  var isTeamLead  = user.role === "teamlead";
+  var isTeamLead = user.role === "teamlead";
 
-  // Who can set what:
-  // CEO/GM: company + team + individual goals
-  // Head of Sales: team + individual goals
-  // Team Lead: individual goals (own team only)
-  var canSetCompany  = isCeo || isGm;
-  var canSetTeam     = isCeo || isGm || isHeadSales;
-  var canSetIndiv    = isCeo || isGm || isHeadSales || isTeamLead;
+  var canSetCompany = isCeo || isGm;
+  var canSetTeam    = isCeo || isGm || isHeadSales;
+  var canSetIndiv   = isCeo || isGm || isHeadSales || isTeamLead;
 
   var availableScopes = [];
   if (canSetCompany) availableScopes.push("company");
   if (canSetTeam)    availableScopes.push("team");
   if (canSetIndiv)   availableScopes.push("individual");
+
+  // Default scope to first available
+  var activeScope = availableScopes.includes(scope) ? scope : availableScopes[0];
 
   var eligibleUsers = Object.values(users).filter(function(u) {
     if (!["closer","teamlead"].includes(u.role)) return false;
@@ -2507,92 +2473,90 @@ function GoalSettingPanel(props) {
   ];
 
   var save = async function() {
-    var targetId = scope === "individual" ? selUser : scope === "team" ? selTeam : null;
-    if (scope !== "company" && !targetId) { flash("⚠️ Select a " + scope); return; }
-    if (!target || !label) { flash("⚠️ Fill target and label"); return; }
+    var targetId = activeScope === "individual" ? selUser : activeScope === "team" ? selTeam : "company";
+    if (activeScope !== "company" && !targetId) { flash("⚠️ Select a target"); return; }
+    if (!target || +target <= 0) { flash("⚠️ Enter a valid target number"); return; }
+    if (!label.trim()) { flash("⚠️ Enter a goal label"); return; }
     setSaving(true);
+    var encodedUserId = activeScope === "company" ? "company" : activeScope === "team" ? "team:" + targetId : targetId;
     var g = {
       id: uid(),
       month: localMonthStr(now),
       type: goalType,
       target: +target,
-      label: label,
+      label: label.trim(),
       setBy: user.id,
       createdAt: Date.now(),
-      scope: scope === "company" ? "company" : null,
-      userId: scope === "individual" ? targetId : null,
-      teamId: scope === "team" ? targetId : null,
+      userId: encodedUserId,
     };
     await onSaveGoal(g);
-    flash("✅ Goal set!");
+    flash("✅ Goal set for " + (activeScope === "company" ? "entire company" : activeScope === "team" && teams[targetId] ? teams[targetId].name : users[targetId] ? users[targetId].name : targetId));
     setTarget(""); setLabel(""); setSelUser(null); setSelTeam(null);
     setSaving(false);
   };
 
-  var deleteGoal = async function(goalId) {
-    if (!window.confirm("Remove this goal?")) return;
-    try {
-      await fetch(SERVER + "/goals/" + goalId, { method: "DELETE" });
-      flash("🗑️ Goal removed");
-      if (onDeleteGoal) onDeleteGoal(goalId);
-    } catch(e) { flash("❌ Failed to remove"); }
-  };
-
-  // Month options - use local date to avoid UTC offset issues
-  var localMonth = function(d) {
-    return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0");
-  };
+  // Month picker (current + 2 past months)
   var monthOptions = [];
   for (var i = 2; i >= 0; i--) {
-    var d = new Date(now.getFullYear(), now.getMonth() - i, 15); // use 15th to avoid UTC edge
-    monthOptions.push(localMonth(d));
+    var d = new Date(now.getFullYear(), now.getMonth() - i, 15);
+    monthOptions.push(localMonthStr(d));
   }
-  var uniqueMonths = monthOptions.filter(function(m,i,a) { return a.indexOf(m) === i; });
 
   return React.createElement("div", null,
-    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 20, flexWrap: "wrap", gap: 10 } },
+    // Header
+    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, flexWrap: "wrap", gap: 10 } },
       React.createElement("div", null,
         React.createElement("h1", { style: { fontSize: 22, fontWeight: 900, marginBottom: 4 } }, "🎯 Goals"),
         React.createElement("p", { style: { fontSize: 13, color: C.muted } }, MONTHS_FULL[now.getMonth()] + " " + now.getFullYear())
       ),
-      React.createElement("select", { value: viewMonth, onChange: function(e) { setViewMonth(e.target.value); }, style: Object.assign({}, S.select, { width: "auto", padding: "6px 12px", fontSize: 12 }) },
-        uniqueMonths.map(function(m) { return React.createElement("option", { key: m, value: m }, m); })
-      )
+      React.createElement("select", {
+        value: viewMonth,
+        onChange: function(e) { setViewMonth(e.target.value); },
+        style: Object.assign({}, S.select, { width: "auto", padding: "6px 12px", fontSize: 12 })
+      }, monthOptions.map(function(m) { return React.createElement("option", { key: m, value: m }, m); }))
     ),
 
-    // ── Tracker
-    React.createElement(GoalTrackerPanel, { user: user, users: users, teams: teams, allLogs: allLogs, goals: goals, scope: isTeamLead ? "team" : "company", viewMonth: viewMonth }),
+    // Tracker (shows goals + delete buttons)
+    React.createElement(GoalTrackerPanel, {
+      user: user, users: users, teams: teams, allLogs: allLogs, goals: goals,
+      scope: isTeamLead ? "team" : "company",
+      viewMonth: viewMonth,
+      onDelete: function() { if (onDeleteGoal) onDeleteGoal(); }
+    }),
 
-    // ── Set new goal
-    canSetIndiv && viewMonth === localMonthStr(now) && React.createElement("div", { style: { background: "rgba(249,115,22,0.03)", border: "1px solid rgba(249,115,22,0.2)", borderRadius: 12, padding: 20, marginTop: 24 } },
+    // Set new goal form (only for current month)
+    canSetIndiv && viewMonth === thisMonth && React.createElement("div", { style: { background: "rgba(249,115,22,0.03)", border: "1px solid rgba(249,115,22,0.2)", borderRadius: 12, padding: 20, marginTop: 8 } },
       React.createElement("div", { style: { fontSize: 15, fontWeight: 800, color: C.orange, marginBottom: 16 } }, "+ Set New Goal"),
 
-      // Scope toggle
-      availableScopes.length > 1 && React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16 } },
+      // Scope selector
+      availableScopes.length > 1 && React.createElement("div", { style: { display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" } },
         availableScopes.map(function(s) {
           var icons = { company: "🏢 Company", team: "👥 Team", individual: "👤 Individual" };
           return React.createElement("button", {
-            key: s, onClick: function() { setScope(s); setSelUser(null); setSelTeam(null); },
-            style: { background: scope === s ? "rgba(249,115,22,0.15)" : "rgba(255,255,255,0.04)", border: "1px solid " + (scope === s ? "rgba(249,115,22,0.4)" : "rgba(255,255,255,0.08)"), borderRadius: 20, padding: "7px 16px", color: scope === s ? C.orange : C.muted, cursor: "pointer", fontSize: 12, fontWeight: scope === s ? 700 : 400 }
+            key: s,
+            onClick: function() { setScope(s); setSelUser(null); setSelTeam(null); },
+            style: { background: activeScope === s ? "rgba(249,115,22,0.15)" : "rgba(255,255,255,0.04)", border: "1px solid " + (activeScope === s ? "rgba(249,115,22,0.4)" : "rgba(255,255,255,0.08)"), borderRadius: 20, padding: "7px 16px", color: activeScope === s ? C.orange : C.muted, cursor: "pointer", fontSize: 12, fontWeight: activeScope === s ? 700 : 400 }
           }, icons[s]);
         })
       ),
 
-      // Select target (not needed for company)
-      scope !== "company" && React.createElement("div", { style: { marginBottom: 14 } },
-        React.createElement("label", { style: S.label }, scope === "individual" ? "Select Staff Member" : "Select Team"),
-        React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap" } },
-          scope === "individual"
+      // Target selection
+      activeScope !== "company" && React.createElement("div", { style: { marginBottom: 14 } },
+        React.createElement("label", { style: S.label }, activeScope === "individual" ? "Select Staff Member" : "Select Team"),
+        React.createElement("div", { style: { display: "flex", gap: 8, flexWrap: "wrap", marginTop: 6 } },
+          activeScope === "individual"
             ? eligibleUsers.map(function(u) {
                 return React.createElement("button", {
-                  key: u.id, onClick: function() { setSelUser(u.id); },
-                  style: { background: selUser === u.id ? "rgba(249,115,22,0.15)" : "rgba(255,255,255,0.04)", border: "1px solid " + (selUser === u.id ? "rgba(249,115,22,0.4)" : "rgba(255,255,255,0.08)"), borderRadius: 8, padding: "6px 12px", color: selUser === u.id ? C.orange : C.soft, cursor: "pointer", fontSize: 12, fontWeight: 600 }
+                  key: u.id,
+                  onClick: function() { setSelUser(u.id); },
+                  style: { background: selUser === u.id ? "rgba(249,115,22,0.15)" : "rgba(255,255,255,0.04)", border: "1px solid " + (selUser === u.id ? "rgba(249,115,22,0.4)" : "rgba(255,255,255,0.08)"), borderRadius: 8, padding: "6px 12px", color: selUser === u.id ? C.orange : C.soft, cursor: "pointer", fontSize: 12, fontWeight: selUser === u.id ? 700 : 400 }
                 }, u.name, React.createElement("span", { style: { fontSize: 10, color: C.muted, marginLeft: 4 } }, "(", teams[u.teamId] ? teams[u.teamId].name : "-", ")"));
               })
             : eligibleTeams.map(function(t) {
                 return React.createElement("button", {
-                  key: t.id, onClick: function() { setSelTeam(t.id); },
-                  style: { background: selTeam === t.id ? "rgba(167,139,250,0.15)" : "rgba(255,255,255,0.04)", border: "1px solid " + (selTeam === t.id ? "rgba(167,139,250,0.4)" : "rgba(255,255,255,0.08)"), borderRadius: 8, padding: "6px 12px", color: selTeam === t.id ? C.purple : C.soft, cursor: "pointer", fontSize: 12, fontWeight: 600 }
+                  key: t.id,
+                  onClick: function() { setSelTeam(t.id); },
+                  style: { background: selTeam === t.id ? "rgba(167,139,250,0.15)" : "rgba(255,255,255,0.04)", border: "1px solid " + (selTeam === t.id ? "rgba(167,139,250,0.4)" : "rgba(255,255,255,0.08)"), borderRadius: 8, padding: "6px 12px", color: selTeam === t.id ? C.purple : C.soft, cursor: "pointer", fontSize: 12, fontWeight: selTeam === t.id ? 700 : 400 }
                 }, teamTypeIcon(t.type), " ", t.name);
               })
         )
@@ -2602,38 +2566,47 @@ function GoalSettingPanel(props) {
       React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 } },
         React.createElement("div", null,
           React.createElement("label", { style: S.label }, "Goal Type"),
-          React.createElement("select", { style: S.select, value: goalType, onChange: function(e) { setGoalType(e.target.value); setLabel(""); } },
+          React.createElement("select", { style: S.select, value: goalType, onChange: function(e) { setGoalType(e.target.value); } },
             goalTypeOptions.map(function(o) { return React.createElement("option", { key: o.v, value: o.v }, o.l); })
           )
         ),
         React.createElement("div", null,
-          React.createElement("label", { style: S.label }, goalType === "conversion" ? "Target % (0-100)" : goalType === "earnings" ? "Target ₦ Amount" : "Target Number"),
-          React.createElement("input", { type: "number", style: S.input, placeholder: goalType === "conversion" ? "e.g. 80" : goalType === "earnings" ? "e.g. 50000" : "e.g. 50", value: target, min: "1",
+          React.createElement("label", { style: S.label }, goalType === "conversion" ? "Target % (0-100)" : goalType === "earnings" ? "Target ₦" : "Target Number"),
+          React.createElement("input", {
+            type: "number", min: "1", style: S.input,
+            placeholder: goalType === "conversion" ? "e.g. 80" : goalType === "earnings" ? "e.g. 50000" : "e.g. 50",
+            value: target,
             onChange: function(e) { setTarget(e.target.value); }
           })
         )
       ),
+
       React.createElement("div", { style: { marginBottom: 16 } },
         React.createElement("label", { style: S.label }, "Goal Label (what staff sees)"),
-        React.createElement("input", { type: "text", style: S.input, placeholder: 'e.g. "Deliver 50 orders this month"', value: label, onChange: function(e) { setLabel(e.target.value); } })
+        React.createElement("input", {
+          type: "text", style: S.input,
+          placeholder: 'e.g. Deliver 50 orders this month',
+          value: label,
+          onChange: function(e) { setLabel(e.target.value); }
+        })
       ),
-      React.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center" } },
+
+      React.createElement("div", { style: { display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" } },
         React.createElement("button", {
           onClick: save,
-          disabled: saving || !target || !label || (scope==="individual" && !selUser) || (scope==="team" && !selTeam),
-          style: Object.assign({}, S.btn, { opacity: (saving||!target||!label||(scope==="individual"&&!selUser)||(scope==="team"&&!selTeam)) ? 0.5 : 1, padding: "11px 28px" })
+          disabled: saving || !target || !label.trim() || (activeScope === "individual" && !selUser) || (activeScope === "team" && !selTeam),
+          style: Object.assign({}, S.btn, { opacity: (saving || !target || !label.trim() || (activeScope==="individual"&&!selUser) || (activeScope==="team"&&!selTeam)) ? 0.5 : 1, padding: "11px 28px" })
         }, saving ? "Saving..." : "🎯 Set Goal"),
-        React.createElement("div", { style: { fontSize: 12, color: C.muted } },
-          scope === "company" ? "Will show to all staff" :
-          scope === "individual" && selUser ? "For: " + (users[selUser] ? users[selUser].name : "") :
-          scope === "team" && selTeam ? "For: " + (teams[selTeam] ? teams[selTeam].name : "") :
-          "Select a target above"
+        React.createElement("span", { style: { fontSize: 12, color: C.muted } },
+          activeScope === "company" ? "Will appear on all staff dashboards" :
+          activeScope === "individual" && selUser ? "For: " + (users[selUser] ? users[selUser].name : "") :
+          activeScope === "team" && selTeam ? "For: " + (teams[selTeam] ? teams[selTeam].name : "") :
+          "← Select a target above"
         )
       )
     )
   );
 }
-
 
 function CommissionReport({ users, teams, allLogs }) {
   const now = /* @__PURE__ */ new Date();
