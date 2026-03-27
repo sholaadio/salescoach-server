@@ -288,6 +288,7 @@ const tierColor = (t) => ({ gold: "#FFB627", silver: "#9CA3AF", bronze: "#CD7C2F
 const fmtDate = (d) => new Date(d).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" });
 const fmtNaira = (n) => `\u20A6${Number(n || 0).toLocaleString()}`;
 const todayStr = () => (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+const localMonthStr = (d) => { var dt = d || new Date(); return dt.getFullYear() + "-" + String(dt.getMonth()+1).padStart(2,"0"); };
 const ROLE_LABELS = { ceo: "CEO", gm: "General Manager", head_sales: "Head of Sales", head_creative: "Head of Creative", hr: "HR Manager", teamlead: "Team Lead", closer: "Sales Closer" };
 const outcomeColor = (o) => ({ confirmed: "#F97316", cancelled: "#FF6B6B", followup: "#FFB627", switchedoff: "#5A6A80", callback: "#A78BFA", unknown: "#5A6A80" })[o] || "#5A6A80";
 const outcomeLabel = (o) => ({ confirmed: "\u2705 Confirmed", cancelled: "\u274C Cancelled", followup: "\u{1F504} Follow-up", switchedoff: "\u{1F4F5} Switched Off", callback: "\u23F0 Call Back", unknown: "\u{1F937} Unknown" })[o] || "Unknown";
@@ -1670,7 +1671,7 @@ function ManagementDashboard({ user, users, teams, allReports, allLogs, allNoAns
   };
   const accentColor = accent(user.role);
   const teamList = Object.values(teams);
-  const thisMonth = (/* @__PURE__ */ new Date()).toISOString().slice(0, 7);
+  const thisMonth = localMonthStr(new Date());
   const closerList = Object.values(users).filter((u) => ["closer", "teamlead"].includes(u.role));
   const allStats = closerList.map((c) => {
     const reports = allReports.filter((r) => r.closerId === c.id);
@@ -2276,11 +2277,14 @@ function GoalProgress(props) {
   var userId = props.userId, allLogs = props.allLogs, teams = props.teams, users = props.users, goals = props.goals;
   try {
     var now = new Date();
-    var thisMonth = now.toISOString().slice(0,7);
+    var thisMonth = localMonthStr(now);
     var teamId = users[userId] ? users[userId].teamId : null;
     // Collect goals relevant to this user: personal + their team + company-wide
     var myGoals = goals.filter(function(g) {
-      if (!g || !g.month || g.month !== thisMonth) return false;
+      if (!g || !g.month) return false;
+      // Accept both exact month match and close months (handles UTC offset storage)
+      var gMonth = g.month;
+      if (gMonth !== thisMonth) return false;
       if (g.scope === "company") return true;
       if (g.userId === userId) return true;
       if (g.teamId && g.teamId === teamId) return true;
@@ -2325,9 +2329,8 @@ function GoalProgress(props) {
 // ── GoalTrackerPanel: shown in TeamLead + Management — full tracking view
 function GoalTrackerPanel(props) {
   var user = props.user, users = props.users, teams = props.teams, allLogs = props.allLogs, goals = props.goals, scope = props.scope;
-  // scope: "team" (TL) or "company" (mgmt)
   var now = new Date();
-  var thisMonth = now.toISOString().slice(0,7);
+  var thisMonth = props.viewMonth || localMonthStr(now);
 
   var myTeamId = user.teamId;
   var myMembers = Object.values(users).filter(function(u) {
@@ -2341,6 +2344,8 @@ function GoalTrackerPanel(props) {
     if (!g || !g.month || g.month !== thisMonth) return false;
     if (g.scope === "company") return true;
     if (scope === "team") {
+      // Show goals set BY this user OR goals for their team/members
+      if (g.setBy === user.id) return true;
       if (g.teamId === myTeamId) return true;
       if (g.userId) {
         var u = users[g.userId];
@@ -2447,7 +2452,7 @@ function GoalTrackerPanel(props) {
 function GoalSettingPanel(props) {
   var user = props.user, users = props.users, teams = props.teams, allLogs = props.allLogs, goals = props.goals, onSaveGoal = props.onSaveGoal, onDeleteGoal = props.onDeleteGoal, flash = props.flash;
   var now = new Date();
-  var thisMonth = now.toISOString().slice(0,7);
+  var thisMonth = localMonthStr(now);
   var MONTHS_FULL = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
   var [scope, setScope] = useState("individual"); // "company" | "team" | "individual"
@@ -2457,7 +2462,7 @@ function GoalSettingPanel(props) {
   var [target, setTarget] = useState("");
   var [label, setLabel] = useState("");
   var [saving, setSaving] = useState(false);
-  var [viewMonth, setViewMonth] = useState(thisMonth);
+  var [viewMonth, setViewMonth] = useState(localMonthStr(now));
 
   var isCeo     = user.role === "ceo";
   var isGm      = user.role === "gm";
@@ -2500,7 +2505,7 @@ function GoalSettingPanel(props) {
     setSaving(true);
     var g = {
       id: uid(),
-      month: thisMonth,
+      month: localMonthStr(now),
       type: goalType,
       target: +target,
       label: label,
@@ -2525,11 +2530,14 @@ function GoalSettingPanel(props) {
     } catch(e) { flash("❌ Failed to remove"); }
   };
 
-  // Month options
+  // Month options - use local date to avoid UTC offset issues
+  var localMonth = function(d) {
+    return d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0");
+  };
   var monthOptions = [];
   for (var i = 2; i >= 0; i--) {
-    var d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    monthOptions.push(d.toISOString().slice(0,7));
+    var d = new Date(now.getFullYear(), now.getMonth() - i, 15); // use 15th to avoid UTC edge
+    monthOptions.push(localMonth(d));
   }
   var uniqueMonths = monthOptions.filter(function(m,i,a) { return a.indexOf(m) === i; });
 
@@ -2545,10 +2553,10 @@ function GoalSettingPanel(props) {
     ),
 
     // ── Tracker
-    React.createElement(GoalTrackerPanel, { user: user, users: users, teams: teams, allLogs: allLogs, goals: goals, scope: isTeamLead ? "team" : "company" }),
+    React.createElement(GoalTrackerPanel, { user: user, users: users, teams: teams, allLogs: allLogs, goals: goals, scope: isTeamLead ? "team" : "company", viewMonth: viewMonth }),
 
     // ── Set new goal
-    canSetIndiv && viewMonth === thisMonth && React.createElement("div", { style: { background: "rgba(249,115,22,0.03)", border: "1px solid rgba(249,115,22,0.2)", borderRadius: 12, padding: 20, marginTop: 24 } },
+    canSetIndiv && viewMonth === localMonthStr(now) && React.createElement("div", { style: { background: "rgba(249,115,22,0.03)", border: "1px solid rgba(249,115,22,0.2)", borderRadius: 12, padding: 20, marginTop: 24 } },
       React.createElement("div", { style: { fontSize: 15, fontWeight: 800, color: C.orange, marginBottom: 16 } }, "+ Set New Goal"),
 
       // Scope toggle
