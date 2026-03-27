@@ -5,7 +5,7 @@ const fetch = require("node-fetch");
 const FormData = require("form-data");
 
 const app = express();
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 app.use(cors());
 app.use(express.json({ limit: "4mb" }));
@@ -30,6 +30,80 @@ const sb = async (path, method, body) => {
   const r = await fetch(SUPABASE_URL + "/rest/v1/" + path, opts);
   return r.json();
 };
+
+// Map MIME types and file extensions to a Whisper-compatible filename + contentType
+function getWhisperFileInfo(originalname, mimetype) {
+  const name = (originalname || "recording").toLowerCase();
+  const ext = name.includes(".") ? name.split(".").pop() : "";
+
+  // Whisper supported formats: flac, m4a, mp3, mp4, mpeg, mpga, oga, ogg, wav, webm
+  // We map everything else to the closest compatible format
+
+  const mimeMap = {
+    // Already supported natively
+    "audio/mpeg":        { filename: "recording.mp3",  contentType: "audio/mpeg" },
+    "audio/mp3":         { filename: "recording.mp3",  contentType: "audio/mpeg" },
+    "audio/mp4":         { filename: "recording.m4a",  contentType: "audio/mp4" },
+    "audio/x-m4a":       { filename: "recording.m4a",  contentType: "audio/mp4" },
+    "audio/m4a":         { filename: "recording.m4a",  contentType: "audio/mp4" },
+    "audio/wav":         { filename: "recording.wav",  contentType: "audio/wav" },
+    "audio/x-wav":       { filename: "recording.wav",  contentType: "audio/wav" },
+    "audio/wave":        { filename: "recording.wav",  contentType: "audio/wav" },
+    "audio/ogg":         { filename: "recording.ogg",  contentType: "audio/ogg" },
+    "audio/oga":         { filename: "recording.oga",  contentType: "audio/ogg" },
+    "audio/flac":        { filename: "recording.flac", contentType: "audio/flac" },
+    "audio/x-flac":      { filename: "recording.flac", contentType: "audio/flac" },
+    "audio/webm":        { filename: "recording.webm", contentType: "audio/webm" },
+    "video/webm":        { filename: "recording.webm", contentType: "audio/webm" },
+    "video/mp4":         { filename: "recording.mp4",  contentType: "video/mp4" },
+    "audio/opus":        { filename: "recording.ogg",  contentType: "audio/ogg" },
+    // 3GPP — send as mp4, Whisper handles it
+    "audio/3gpp":        { filename: "recording.mp4",  contentType: "video/mp4" },
+    "audio/3gpp2":       { filename: "recording.mp4",  contentType: "video/mp4" },
+    "video/3gpp":        { filename: "recording.mp4",  contentType: "video/mp4" },
+    "video/3gpp2":       { filename: "recording.mp4",  contentType: "video/mp4" },
+    // AAC — send as m4a
+    "audio/aac":         { filename: "recording.m4a",  contentType: "audio/mp4" },
+    "audio/x-aac":       { filename: "recording.m4a",  contentType: "audio/mp4" },
+    // AMR — send as mp4 (best available without ffmpeg)
+    "audio/amr":         { filename: "recording.mp4",  contentType: "video/mp4" },
+    "audio/amr-wb":      { filename: "recording.mp4",  contentType: "video/mp4" },
+    // WMA — send as mp4
+    "audio/x-ms-wma":    { filename: "recording.mp4",  contentType: "video/mp4" },
+    "audio/wma":         { filename: "recording.mp4",  contentType: "video/mp4" },
+  };
+
+  // Extension fallback map (in case browser sends wrong/missing MIME)
+  const extMap = {
+    "mp3":  { filename: "recording.mp3",  contentType: "audio/mpeg" },
+    "m4a":  { filename: "recording.m4a",  contentType: "audio/mp4" },
+    "mp4":  { filename: "recording.mp4",  contentType: "video/mp4" },
+    "wav":  { filename: "recording.wav",  contentType: "audio/wav" },
+    "ogg":  { filename: "recording.ogg",  contentType: "audio/ogg" },
+    "oga":  { filename: "recording.oga",  contentType: "audio/ogg" },
+    "flac": { filename: "recording.flac", contentType: "audio/flac" },
+    "webm": { filename: "recording.webm", contentType: "audio/webm" },
+    "opus": { filename: "recording.ogg",  contentType: "audio/ogg" },
+    "aac":  { filename: "recording.m4a",  contentType: "audio/mp4" },
+    "3gp":  { filename: "recording.mp4",  contentType: "video/mp4" },
+    "3gpp": { filename: "recording.mp4",  contentType: "video/mp4" },
+    "3g2":  { filename: "recording.mp4",  contentType: "video/mp4" },
+    "amr":  { filename: "recording.mp4",  contentType: "video/mp4" },
+    "wma":  { filename: "recording.mp4",  contentType: "video/mp4" },
+    "caf":  { filename: "recording.m4a",  contentType: "audio/mp4" },
+    "aiff": { filename: "recording.wav",  contentType: "audio/wav" },
+    "aif":  { filename: "recording.wav",  contentType: "audio/wav" },
+    "mpeg": { filename: "recording.mpeg", contentType: "audio/mpeg" },
+    "mpga": { filename: "recording.mpga", contentType: "audio/mpeg" },
+  };
+
+  // Try MIME type first, then extension fallback
+  if (mimetype && mimeMap[mimetype]) return mimeMap[mimetype];
+  if (ext && extMap[ext]) return extMap[ext];
+
+  // Default: treat as mp4 (most universal for Whisper)
+  return { filename: "recording.mp4", contentType: "video/mp4" };
+}
 
 app.get("/", function(req, res) {
   res.json({ status: "SalesCoach Server running", supabase: !!SUPABASE_KEY });
@@ -115,21 +189,43 @@ app.delete("/noanswers/:id", async function(req, res) {
   catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+app.get("/goals", async function(req, res) {
+  try { res.json(await sb("sc_goals?select=*")); }
+  catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+app.post("/goals", async function(req, res) {
+  try { res.json(await sb("sc_goals", "POST", req.body)); }
+  catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.post("/transcribe", upload.single("audio"), async function(req, res) {
   try {
     if (!req.file) return res.status(400).json({ error: "No audio file." });
     if (!OPENAI_KEY) return res.status(500).json({ error: "OpenAI key missing." });
+
+    // Get correct filename/contentType for Whisper based on MIME type and extension
+    const fileInfo = getWhisperFileInfo(req.file.originalname, req.file.mimetype);
+
     const form = new FormData();
-    form.append("file", req.file.buffer, { filename: req.file.originalname || "recording.mp3", contentType: req.file.mimetype || "audio/mpeg" });
+    form.append("file", req.file.buffer, {
+      filename: fileInfo.filename,
+      contentType: fileInfo.contentType
+    });
     form.append("model", "whisper-1");
     form.append("prompt", "Nigerian sales call. May contain English, Pidgin, Yoruba, Igbo, or Hausa.");
+
     const r = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-      method: "POST", headers: { Authorization: "Bearer " + OPENAI_KEY, ...form.getHeaders() }, body: form
+      method: "POST",
+      headers: { Authorization: "Bearer " + OPENAI_KEY, ...form.getHeaders() },
+      body: form
     });
     const data = await r.json();
     if (!r.ok) return res.status(r.status).json({ error: data.error ? data.error.message : "Whisper error." });
     res.json({ transcript: data.text });
-  } catch(e) { res.status(500).json({ error: "Transcription failed." }); }
+  } catch(e) {
+    res.status(500).json({ error: "Transcription failed: " + e.message });
+  }
 });
 
 app.post("/analyze", async function(req, res) {
@@ -229,10 +325,9 @@ IMPORTANT: For YouTube, provide REAL video IDs of videos that actually exist on 
   } catch(e) { res.status(500).json({ error: "Analysis failed: " + e.message }); }
 });
 
-
 app.post("/analyze-summary", async function(req, res) {
   try {
-    const { prompt, closerName } = req.body;
+    const { prompt } = req.body;
     if (!prompt) return res.status(400).json({ error: "No prompt." });
     if (!ANTHROPIC_KEY) return res.status(500).json({ error: "Anthropic key missing." });
     const r = await fetch("https://api.anthropic.com/v1/messages", {
