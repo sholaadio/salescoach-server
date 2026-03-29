@@ -667,8 +667,8 @@ function CommissionCard({ comm, label }) {
 }
 function ReportModal({ report, onClose }) {
   const { analysis, closerName, callType, callOutcome, product, date } = report;
-  const ytId = (v) => v && v !== "undefined" && v.length === 11 ? v : null;
-  const ytSearchUrl = (title) => `https://www.youtube.com/results?search_query=${encodeURIComponent(title)}`;
+  const ytId = (v) => null;
+  const ytSearchUrl = (title) => `https://www.youtube.com/results?search_query=${encodeURIComponent(title + " sales training")}`;
   const amazonUrl = (title) => `https://www.amazon.com/s?k=${encodeURIComponent(title)}&i=stripbooks`;
   const spotifyUrl = (show, title) => `https://open.spotify.com/search/${encodeURIComponent((show || "") + (title || ""))}`;
   return /* @__PURE__ */ React.createElement("div", { onClick: (e) => {
