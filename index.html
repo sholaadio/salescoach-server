@@ -808,6 +808,7 @@ function NoAnswerForm({ user, onSaved }) {
   return /* @__PURE__ */ React.createElement("div", { style: S.card }, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 14, fontWeight: 700, color: C.text, marginBottom: 14 } }, "\u{1F4F5} Log No-Answer Call"), /* @__PURE__ */ React.createElement("div", { style: S.g2 }, /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: S.label }, "Order ID"), /* @__PURE__ */ React.createElement("input", { style: S.input, placeholder: "e.g. ORD-4821", value: form.orderId, onChange: (e) => set("orderId", e.target.value) })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: S.label }, "Customer Name"), /* @__PURE__ */ React.createElement("input", { style: S.input, placeholder: "Customer name", value: form.customerName, onChange: (e) => set("customerName", e.target.value) })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: S.label }, "Reason"), /* @__PURE__ */ React.createElement("select", { style: S.select, value: form.reason, onChange: (e) => set("reason", e.target.value) }, /* @__PURE__ */ React.createElement("option", { value: "switchedoff" }, "\u{1F4F5} Switched Off"), /* @__PURE__ */ React.createElement("option", { value: "notreachable" }, "\u{1F4F4} Not Reachable"), /* @__PURE__ */ React.createElement("option", { value: "busy" }, "\u{1F4F6} Line Busy"), /* @__PURE__ */ React.createElement("option", { value: "nopickup" }, "\u{1F515} No Pickup"), /* @__PURE__ */ React.createElement("option", { value: "wrongnumber" }, "\u274C Wrong Number"))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: S.label }, "Attempts"), /* @__PURE__ */ React.createElement("select", { style: S.select, value: form.attempts, onChange: (e) => set("attempts", e.target.value) }, ["1", "2", "3", "4", "5+"].map((v) => /* @__PURE__ */ React.createElement("option", { key: v, value: v }, v, " attempt", v !== "1" ? "s" : "")))), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: S.label }, "Schedule Callback (optional)"), /* @__PURE__ */ React.createElement("input", { style: S.input, type: "datetime-local", value: form.callback, onChange: (e) => set("callback", e.target.value) })), /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("label", { style: S.label }, "Notes"), /* @__PURE__ */ React.createElement("input", { style: S.input, placeholder: "Additional notes...", value: form.notes, onChange: (e) => set("notes", e.target.value) }))), /* @__PURE__ */ React.createElement("button", { style: { ...S.btn, marginTop: 14 }, onClick: save, disabled: saving }, saving ? "Saving..." : "Log No-Answer"));
 }
 function CallUploadSection({ user, teams, refresh }) {
+  const [showBulk, setShowBulk] = useState(false);
   const [callType, setCallType] = useState("phone");
   const [callOutcome, setCallOutcome] = useState("unknown");
   const [success, setSuccess] = useState(false);
@@ -878,8 +879,193 @@ function CallUploadSection({ user, teams, refresh }) {
     e.stopPropagation();
     setAudioFile(null);
     if (fileRef.current) fileRef.current.value = "";
-  } }, "\u2715 Remove"))) : /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, marginBottom: 10 } }, "\u{1F399}\uFE0F"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 } }, "Tap to upload your call recording"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: C.muted, lineHeight: 1.7 } }, "Supports MP3, M4A, WAV, AAC, OGG, 3GPP, AMR, WMA & more \xB7 Max 25MB", /* @__PURE__ */ React.createElement("br", null), "Whisper AI will transcribe it automatically"))), /* @__PURE__ */ React.createElement("button", { style: { ...S.btn, opacity: !audioFile || !fileOk ? 0.45 : 1, width: "100%", padding: "13px", fontSize: 14 }, onClick: submit, disabled: !audioFile || !fileOk }, "\u{1F399}\uFE0F \u2192 \u{1F916} Transcribe & Analyze Call"));
+  } }, "\u2715 Remove"))) : /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement("div", { style: { fontSize: 32, marginBottom: 10 } }, "\u{1F399}\uFE0F"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 4 } }, "Tap to upload your call recording"), /* @__PURE__ */ React.createElement("div", { style: { fontSize: 11, color: C.muted, lineHeight: 1.7 } }, "Supports MP3, M4A, WAV, AAC, OGG, 3GPP, AMR, WMA & more \xB7 Max 25MB", /* @__PURE__ */ React.createElement("br", null), "Whisper AI will transcribe it automatically"))), /* @__PURE__ */ React.createElement("button", { style: { ...S.btn, opacity: !audioFile || !fileOk ? 0.45 : 1, width: "100%", padding: "13px", fontSize: 14 }, onClick: submit, disabled: !audioFile || !fileOk }, "\u{1F399}\uFE0F \u2192 \u{1F916} Transcribe & Analyze Call"),
+    React.createElement("div", { style:{textAlign:"center",marginTop:12} },
+      React.createElement("button", { onClick:()=>setShowBulk(true), style:{background:"transparent",border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 18px",color:C.muted,cursor:"pointer",fontSize:13} },
+        "\u{1F4E6} Bulk Upload (2\u201310 calls at once)"
+      )
+    ),
+    showBulk && React.createElement(BulkCallUpload, { user, teams, refresh, onClose:()=>setShowBulk(false) })
+  );
 }
+
+// ═══════════════════════════════════════════════════════
+// BULK CALL UPLOAD — upload up to 10 calls at once
+// ═══════════════════════════════════════════════════════
+function BulkCallUpload({ user, teams, refresh, onClose }) {
+  const MAX_CALLS = 10;
+  const teamType = teams[user.teamId]?.type || "sales";
+  const mkSlot = () => ({ id: uid(), callType:"phone", product:"", callOutcome:"unknown", file:null, status:"idle", error:"", score:null });
+  const [slots, setSlots] = useState([mkSlot(), mkSlot()]);
+  const [running, setRunning] = useState(false);
+  const [done, setDone] = useState(false);
+  const [summary, setSummary] = useState(null);
+  const fileRefs = useRef({});
+
+  const updateSlot = (id, patch) => setSlots(prev => prev.map(s => s.id === id ? {...s,...patch} : s));
+
+  const addSlot = () => {
+    if (slots.length >= MAX_CALLS) return;
+    setSlots(prev => [...prev, mkSlot()]);
+  };
+
+  const removeSlot = (id) => {
+    if (slots.length <= 1) return;
+    setSlots(prev => prev.filter(s => s.id !== id));
+  };
+
+  const handleFile = (id, e) => {
+    const f = e.target.files[0];
+    if (!f) return;
+    if (f.size > 50 * 1024 * 1024) { updateSlot(id, {error:"File too large (max 50MB)"}); return; }
+    updateSlot(id, {file:f, error:""});
+  };
+
+  const processAll = async () => {
+    const valid = slots.filter(s => s.file);
+    if (valid.length === 0) { alert("Please select at least one audio file."); return; }
+    setRunning(true);
+    setDone(false);
+    let ok = 0, fail = 0;
+    for (let i = 0; i < slots.length; i++) {
+      const s = slots[i];
+      if (!s.file) continue;
+      updateSlot(s.id, {status:"processing", error:""});
+      try {
+        const transcript = await transcribeAudio(s.file);
+        const analysis = await analyzeWithClaude({ transcript, closerName: user.name, callType: s.callType, callOutcome: s.callOutcome, product: s.product, teamType });
+        await addReport({ id: uid(), closerId: user.id, closerName: user.name, teamId: user.teamId, teamType, date: Date.now(), callType: s.callType, callOutcome: s.callOutcome, product: s.product, audioFileName: s.file.name, transcript, analysis });
+        updateSlot(s.id, {status:"done", score: analysis.overallScore || 0, error:""});
+        ok++;
+      } catch(e) {
+        updateSlot(s.id, {status:"failed", error: e.message || "Failed"});
+        fail++;
+      }
+    }
+    await refresh();
+    setRunning(false);
+    setDone(true);
+    setSummary({ok, fail, total: ok+fail});
+  };
+
+  const retrySlot = async (id) => {
+    const s = slots.find(x => x.id === id);
+    if (!s || !s.file) return;
+    updateSlot(id, {status:"processing", error:""});
+    try {
+      const transcript = await transcribeAudio(s.file);
+      const analysis = await analyzeWithClaude({ transcript, closerName: user.name, callType: s.callType, callOutcome: s.callOutcome, product: s.product, teamType });
+      await addReport({ id: uid(), closerId: user.id, closerName: user.name, teamId: user.teamId, teamType, date: Date.now(), callType: s.callType, callOutcome: s.callOutcome, product: s.product, audioFileName: s.file.name, transcript, analysis });
+      updateSlot(id, {status:"done", score: analysis.overallScore || 0, error:""});
+      await refresh();
+    } catch(e) {
+      updateSlot(id, {status:"failed", error: e.message || "Failed"});
+    }
+  };
+
+  const statusIcon = (s) => ({idle:"⬜", processing:"🔄", done:"✅", failed:"❌"})[s.status] || "⬜";
+  const statusColor = (s) => ({idle:C.muted, processing:C.yellow, done:C.green, failed:C.red})[s.status] || C.muted;
+  const totalWithFile = slots.filter(s => s.file).length;
+  const processingCount = slots.filter(s => s.status === "processing").length;
+  const doneCount = slots.filter(s => s.status === "done").length;
+
+  return React.createElement("div", { style: { position:"fixed", inset:0, background:"rgba(0,0,0,0.7)", zIndex:2000, overflowY:"auto", display:"flex", alignItems:"flex-start", justifyContent:"center", padding:"40px 16px" }},
+    React.createElement("div", { style: { background:C.card, border:`1px solid ${C.border}`, borderRadius:20, width:"100%", maxWidth:900, padding:28 }},
+      // Header
+      React.createElement("div", { style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}},
+        React.createElement("div",null,
+          React.createElement("div",{style:{fontSize:20,fontWeight:900,color:C.text}},"📦 Bulk Call Upload"),
+          React.createElement("div",{style:{fontSize:13,color:C.muted,marginTop:3}},"Upload up to "+MAX_CALLS+" calls at once. Each will be transcribed and analyzed by AI.")
+        ),
+        React.createElement("button",{onClick:onClose,style:{background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:"8px 16px",color:C.text,cursor:"pointer",fontSize:13}},"✕ Close")
+      ),
+
+      // Summary banner
+      done && summary && React.createElement("div",{style:{background:summary.fail===0?"rgba(0,229,160,0.1)":"rgba(255,182,39,0.1)",border:`1px solid ${summary.fail===0?"rgba(0,229,160,0.3)":"rgba(255,182,39,0.3)"}`,borderRadius:12,padding:"14px 18px",marginBottom:20,fontSize:14,fontWeight:700,color:summary.fail===0?C.green:C.yellow}},
+        "✅ "+summary.ok+" analyzed successfully"+(summary.fail>0?" · ❌ "+summary.fail+" failed":"")+" · "+summary.total+" total"
+      ),
+
+      // Progress bar while running
+      running && React.createElement("div",{style:{marginBottom:20}},
+        React.createElement("div",{style:{display:"flex",justifyContent:"space-between",fontSize:13,color:C.muted,marginBottom:6}},
+          React.createElement("span",null,"Analyzing "+doneCount+" of "+totalWithFile+"..."),
+          React.createElement("span",null,processingCount>0?"🔄 Processing...":"")
+        ),
+        React.createElement("div",{style:{height:6,background:C.surface,borderRadius:999,overflow:"hidden"}},
+          React.createElement("div",{style:{height:"100%",width:(totalWithFile>0?Math.round(doneCount/totalWithFile*100):0)+"%",background:`linear-gradient(90deg,${C.green},#EA580C)`,borderRadius:999,transition:"width 0.5s"}})
+        )
+      ),
+
+      // Call slots
+      slots.map((s, idx) => React.createElement("div",{key:s.id,style:{background:C.surface,border:`1px solid ${s.status==="failed"?C.red:s.status==="done"?C.green:C.border}`,borderRadius:14,padding:16,marginBottom:12}},
+        // Slot header
+        React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}},
+          React.createElement("div",{style:{display:"flex",alignItems:"center",gap:10}},
+            React.createElement("div",{style:{fontSize:16}},(s.status==="processing"?"🔄":statusIcon(s))),
+            React.createElement("div",{style:{fontSize:13,fontWeight:700,color:statusColor(s)}},"Call "+(idx+1)+(s.status==="done"?" · Score: "+s.score+"/100":s.status==="processing"?" · Analyzing...":s.status==="failed"?" · Failed":""))
+          ),
+          React.createElement("div",{style:{display:"flex",gap:8}},
+            s.status==="failed" && React.createElement("button",{onClick:()=>retrySlot(s.id),style:{background:C.surface,border:`1px solid ${C.orange}`,borderRadius:8,padding:"5px 12px",color:C.orange,cursor:"pointer",fontSize:12}},"🔄 Retry"),
+            !running && s.status!=="done" && slots.length>1 && React.createElement("button",{onClick:()=>removeSlot(s.id),style:{background:"transparent",border:"none",color:C.muted,cursor:"pointer",fontSize:18,lineHeight:1}},"×")
+          )
+        ),
+        // Form fields — 3 cols + file picker
+        React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1.5fr 1.5fr",gap:10,marginBottom:10}},
+          React.createElement("div",null,
+            React.createElement("label",{style:{...S.label,fontSize:10}},"Call Type"),
+            React.createElement("select",{style:{...S.select,padding:"8px 10px",fontSize:13},value:s.callType,disabled:running||s.status==="done",onChange:e=>updateSlot(s.id,{callType:e.target.value})},
+              React.createElement("option",{value:"phone"},"📞 Phone"),
+              React.createElement("option",{value:"whatsapp"},"💬 WhatsApp")
+            )
+          ),
+          React.createElement("div",null,
+            React.createElement("label",{style:{...S.label,fontSize:10}},"Product Pitched"),
+            React.createElement("input",{style:{...S.input,padding:"8px 10px",fontSize:13},placeholder:"e.g. Weight Loss Bundle",value:s.product,disabled:running||s.status==="done",onChange:e=>updateSlot(s.id,{product:e.target.value})})
+          ),
+          React.createElement("div",null,
+            React.createElement("label",{style:{...S.label,fontSize:10}},"Call Outcome"),
+            React.createElement("select",{style:{...S.select,padding:"8px 10px",fontSize:13},value:s.callOutcome,disabled:running||s.status==="done",onChange:e=>updateSlot(s.id,{callOutcome:e.target.value})},
+              React.createElement("option",{value:"unknown"},"🤷 Unknown"),
+              React.createElement("option",{value:"confirmed"},"✅ Confirmed"),
+              React.createElement("option",{value:"cancelled"},"❌ Cancelled"),
+              React.createElement("option",{value:"followup"},"🔄 Follow-up"),
+              React.createElement("option",{value:"callback"},"⏰ Call Back")
+            )
+          )
+        ),
+        // File picker
+        s.status!=="done"
+          ? React.createElement("div",{onClick:()=>{ if(!running) fileRefs.current[s.id]?.click(); },style:{border:`2px dashed ${s.file?C.green:C.border}`,borderRadius:10,padding:"12px 16px",cursor:running?"default":"pointer",background:s.file?"rgba(0,229,160,0.04)":C.surface,display:"flex",alignItems:"center",gap:12}},
+              React.createElement("input",{ref:el=>fileRefs.current[s.id]=el,type:"file",accept:"audio/*,.mp3,.m4a,.wav,.ogg,.aac",style:{display:"none"},onChange:e=>handleFile(s.id,e)}),
+              React.createElement("div",{style:{fontSize:20}},s.file?"🎵":"🎙️"),
+              s.file
+                ? React.createElement("div",null,
+                    React.createElement("div",{style:{fontSize:12,fontWeight:700,color:C.green}},(s.file.name||"").slice(0,40)),
+                    React.createElement("div",{style:{fontSize:11,color:C.muted}},(s.file.size/1024/1024).toFixed(1)+"MB")
+                  )
+                : React.createElement("div",{style:{fontSize:12,color:C.muted}},"Click to select audio recording"),
+              s.error && React.createElement("div",{style:{fontSize:11,color:C.red,marginLeft:"auto"}},s.error)
+            )
+          : React.createElement("div",{style:{fontSize:12,color:C.green,fontWeight:600}},"✅ Analysis complete — saved to History")
+      )),
+
+      // Add + run buttons
+      React.createElement("div",{style:{display:"flex",gap:12,marginTop:16}},
+        !running && !done && React.createElement("button",{onClick:addSlot,disabled:slots.length>=MAX_CALLS,style:{...S.btnGhost,opacity:slots.length>=MAX_CALLS?0.4:1}},
+          "+ Add Call ("+(slots.length)+"/"+MAX_CALLS+")"
+        ),
+        !done
+          ? React.createElement("button",{onClick:processAll,disabled:running||totalWithFile===0,style:{...S.btn,flex:1,padding:"13px",fontSize:14,opacity:running||totalWithFile===0?0.5:1}},
+              running?"🔄 Analyzing...":"🚀 Upload & Analyze All ("+totalWithFile+" call"+(totalWithFile!==1?"s":"")+")"
+            )
+          : React.createElement("button",{onClick:()=>{setSlots([mkSlot(),mkSlot()]);setDone(false);setSummary(null);},style:{...S.btnGhost,flex:1}},
+              "🔄 Start New Batch"
+            )
+      )
+    )
+  );
+}
+
 function CloserPortal({ user, users, teams, allReports, allLogs, allNoAnswers, goals, onLogout, refresh, saveUsersData }) {
   const [tab, setTab] = React.useState("dashboard");
   const [period, setPeriod] = React.useState("month");
@@ -1833,6 +2019,7 @@ function ManagementDashboard({ user, users, teams, allReports, allLogs, allNoAns
     { id: "teams",       icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z", label: "Teams" },
     { id: "commission",  icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z", label: "Commission" },
     { id: "commreport",  icon: "M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z", label: "Pay Report" },
+    { id: "commrules", icon: "M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z", label: "Commission Rules" },
     { id: "leaderboard", icon: "M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z", label: "Leaderboard" },
     { id: "analyses",    icon: "M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z", label: "Analyses" },
     { id: "attendance",  icon: "M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z", label: "Attendance" },
@@ -1953,7 +2140,9 @@ function ManagementDashboard({ user, users, teams, allReports, allLogs, allNoAns
       if (user.role === "head_sales") return ["ceo", "gm", "head_creative", "hr"].includes(u.role) ? "\u2022\u2022\u2022\u2022" : u.pin;
       return "\u2022\u2022\u2022\u2022";
     })()), /* @__PURE__ */ React.createElement("td", { style: S.td }, /* @__PURE__ */ React.createElement("div", { style: { display: "flex", gap: 8 } }, canEditName(u) && /* @__PURE__ */ React.createElement(EditNameInline, { uid: u.id, currentName: u.name, users, saveUsersData, refresh, flash }), canRemove(u) && /* @__PURE__ */ React.createElement("button", { onClick: () => removeUser(u.id), style: { ...S.btnDanger, padding: "6px 14px", fontSize: 13 } }, "Remove"))));
-  }))))), tab === "commreport" && /* @__PURE__ */ React.createElement(CommissionReport, { users, teams, allLogs }), tab === "attendance" && /* @__PURE__ */ React.createElement(AttendanceTab, { user, users, teams, allLogs, scope: "company" }), tab === "goals" && /* @__PURE__ */ React.createElement(GoalSettingPanel, { user, users, teams, allLogs, goals: goals || [], onSaveGoal: async (g) => {
+  }))))), tab === "commreport" && /* @__PURE__ */ React.createElement(CommissionReport, { users, teams, allLogs }), tab === "commrules" && /* @__PURE__ */ React.createElement("div", null, React.createElement("h1", { style: { fontSize: 22, fontWeight: 900, marginBottom: 4 } }, "💰 Commission Structure"), React.createElement("p", { style: { fontSize: 13, color: C.muted, marginBottom: 20 } }, "Edit commission rates. Changes only affect new logs going forward."), React.createElement(CommissionEditor, { user })), tab === "attendance" && /* @__PURE__ */ React.createElement(AttendanceTab, { user, users, teams, allLogs, scope: "company" }), tab === "goals" && /* @__PURE__ */ React.createElement("div", null,
+    ["ceo","gm"].includes(user.role) && React.createElement(PendingDeletionsPanel, { user, goals, refresh }),
+    React.createElement(GoalSettingPanel, { user, users, teams, allLogs, goals: goals || [], onSaveGoal: async (g) => {
     try {
       await saveGoal_api(g);
       await refresh();
@@ -1962,7 +2151,8 @@ function ManagementDashboard({ user, users, teams, allReports, allLogs, allNoAns
       flash("❌ Save failed: " + e.message);
       throw e;
     }
-  }, onDeleteGoal: async () => { await refresh(); }, flash }), tab === "roles" && (perms.manageRoles || perms.resetPins) && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(PinResetPanel, { user, users, saveUsersData, refresh, flash }), perms.manageRoles && /* @__PURE__ */ React.createElement(PermissionsPanel, { users, saveUsersData, refresh, flash })), tab === "summary" && perms.generateSummary && /* @__PURE__ */ React.createElement(ManagementSummaryTab, { user, users, allReports, allLogs, teams })
+  }, onDeleteGoal: async () => { await refresh(); }, flash })
+  ), tab === "roles" && (perms.manageRoles || perms.resetPins) && /* @__PURE__ */ React.createElement("div", null, /* @__PURE__ */ React.createElement(PinResetPanel, { user, users, saveUsersData, refresh, flash }), perms.manageRoles && /* @__PURE__ */ React.createElement(PermissionsPanel, { users, saveUsersData, refresh, flash })), tab === "summary" && perms.generateSummary && /* @__PURE__ */ React.createElement(ManagementSummaryTab, { user, users, allReports, allLogs, teams })
       )
     ),
     viewReport && React.createElement(ReportModal, { report: viewReport, onClose: () => setViewReport(null) }),
@@ -2316,23 +2506,29 @@ function GoalBar(props) {
 // ── GoalProgress: shown on Closer dashboard — shows company + team + personal goals
 function GoalProgress(props) {
   var userId = props.userId, allLogs = props.allLogs, teams = props.teams, users = props.users, goals = props.goals;
+  var [activeTab, setActiveTab] = React.useState("company");
   try {
     var now = new Date();
     var thisMonth = localMonthStr(now);
     var teamId = users[userId] ? users[userId].teamId : null;
-    // Collect goals relevant to this user: personal + their team + company-wide
-    var myGoals = goals.filter(function(g) {
+    var allClosers = Object.values(users).filter(function(u) { return u.role === "closer"; });
+
+    // Split goals into 3 buckets
+    var companyGoals = goals.filter(function(g) {
       if (!g || !g.month || g.month !== thisMonth) return false;
-      var gUserId = g.userId || "";
-      // Company goal: userId === "company"
-      if (gUserId === "company") return true;
-      // Team goal: userId === "team:teamId"
-      if (gUserId === "team:" + teamId) return true;
-      // Individual goal: userId === this user's id
-      if (gUserId === userId) return true;
-      return false;
+      return (g.userId || "") === "company";
     });
-    if (myGoals.length === 0) {
+    var teamGoals = goals.filter(function(g) {
+      if (!g || !g.month || g.month !== thisMonth) return false;
+      return (g.userId || "") === "team:" + teamId;
+    });
+    var personalGoals = goals.filter(function(g) {
+      if (!g || !g.month || g.month !== thisMonth) return false;
+      return (g.userId || "") === userId;
+    });
+
+    var allGoals = companyGoals.concat(teamGoals).concat(personalGoals);
+    if (allGoals.length === 0) {
       return React.createElement("div", { style: { background: C.card, border: "1px solid " + C.border, borderRadius: 8, padding: "14px 20px", marginBottom: 16, display: "flex", alignItems: "center", gap: 10 } },
         React.createElement("div", { style: { fontSize: 20 } }, "🎯"),
         React.createElement("div", null,
@@ -2342,34 +2538,350 @@ function GoalProgress(props) {
       );
     }
 
-    // Compute company-wide progress for company goals
-    var allClosers = Object.values(users).filter(function(u) { return u.role === "closer"; });
+    var tabs = [
+      { id: "company", label: "🏢 Company", goals: companyGoals },
+      { id: "team",    label: "👥 Team",    goals: teamGoals },
+      { id: "personal",label: "👤 Personal", goals: personalGoals },
+    ];
+
+    var activeGoals = tabs.find(function(t) { return t.id === activeTab; }).goals;
 
     return React.createElement("div", { style: { background: C.card, border: "1px solid " + C.border, borderRadius: 8, padding: 20, marginBottom: 16 } },
-      React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 14 } }, "🎯 Monthly Goals"),
-      myGoals.map(function(g) {
-        var current = 0;
-        var sublabel = "";
-        var gUserId = g.userId || "";
-        var setByName = users[g.setBy] ? users[g.setBy].name.split(" ")[0] : "manager";
-        if (gUserId === "company") {
-          allClosers.forEach(function(c) { current += computeGoalProgress(g, c.id, allLogs, thisMonth).current; });
-          sublabel = "🏢 Company goal · Set by " + setByName;
-        } else if (gUserId.indexOf("team:") === 0) {
-          var tId = gUserId.replace("team:","");
-          var members = Object.values(users).filter(function(u) { return u.teamId === tId && u.role === "closer"; });
-          members.forEach(function(m) { current += computeGoalProgress(g, m.id, allLogs, thisMonth).current; });
-          sublabel = "👥 Team goal · Set by " + setByName;
-        } else {
-          current = computeGoalProgress(g, userId, allLogs, thisMonth).current;
-          sublabel = "👤 Personal goal · Set by " + setByName;
-        }
-        return React.createElement(GoalBar, { key: g.id, g: g, current: current, sublabel: sublabel });
-      })
+      React.createElement("div", { style: { display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom: 14 } },
+        React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.text } }, "🎯 Monthly Goals"),
+        React.createElement("div", { style: { display:"flex", gap:6 } },
+          tabs.map(function(t) {
+            var isActive = activeTab === t.id;
+            return React.createElement("button", {
+              key: t.id,
+              onClick: function() { setActiveTab(t.id); },
+              style: {
+                background: isActive ? C.orange+"22" : "transparent",
+                color: isActive ? C.orange : C.muted,
+                border: isActive ? "1px solid "+C.orange+"55" : "1px solid "+C.border,
+                borderRadius: 20, padding: "4px 12px", fontSize: 11, fontWeight: isActive?700:400,
+                cursor: "pointer", display:"flex", alignItems:"center", gap:4
+              }
+            }, t.label, t.goals.length > 0 && React.createElement("span",{style:{background:isActive?C.orange:"rgba(255,255,255,0.1)",color:isActive?"#fff":C.muted,borderRadius:10,padding:"0px 5px",fontSize:10,fontWeight:700}},t.goals.length));
+          })
+        )
+      ),
+      activeGoals.length === 0
+        ? React.createElement("div", { style:{textAlign:"center",padding:"20px",color:C.muted,fontSize:12} },
+            "No " + activeTab + " goals set for this month"
+          )
+        : activeGoals.map(function(g) {
+            var current = 0;
+            var sublabel = "";
+            var gUserId = g.userId || "";
+            var setByName = users[g.setBy] ? users[g.setBy].name.split(" ")[0] : "manager";
+            if (gUserId === "company") {
+              allClosers.forEach(function(c) { current += computeGoalProgress(g, c.id, allLogs, thisMonth).current; });
+              sublabel = "Set by " + setByName;
+            } else if (gUserId.indexOf("team:") === 0) {
+              var tId = gUserId.replace("team:","");
+              var members = Object.values(users).filter(function(u) { return u.teamId === tId && u.role === "closer"; });
+              members.forEach(function(m) { current += computeGoalProgress(g, m.id, allLogs, thisMonth).current; });
+              sublabel = "Set by " + setByName;
+            } else {
+              current = computeGoalProgress(g, userId, allLogs, thisMonth).current;
+              sublabel = "Set by " + setByName;
+            }
+            return React.createElement(GoalBar, { key: g.id, g: g, current: current, sublabel: sublabel });
+          })
     );
   } catch(e) {
     return null;
   }
+}
+
+
+// ── GoalDeleteButton: approval-aware delete
+function GoalDeleteButton({ g, user, users, onDelete }) {
+  var [pending, setPending] = React.useState(false);
+  var [requested, setRequested] = React.useState(false);
+
+  // Determine if this deletion needs approval
+  var needsApproval = false;
+  var approverRole = null;
+
+  if (user.role === "teamlead") {
+    // TL deleting an individual goal → needs HOS approval
+    var gUserId = g.userId || "";
+    if (gUserId !== "company" && gUserId.indexOf("team:") !== 0 && gUserId) {
+      needsApproval = true;
+      approverRole = "head_sales";
+    }
+  } else if (user.role === "head_sales") {
+    // HOS deleting a team goal → needs CEO/GM approval
+    var gUserId2 = g.userId || "";
+    if (gUserId2.indexOf("team:") === 0) {
+      needsApproval = true;
+      approverRole = "ceo";
+    }
+  }
+
+  var handleDelete = async function() {
+    if (needsApproval) {
+      if (!window.confirm("This deletion requires approval from " + (approverRole === "head_sales" ? "Head of Sales" : "CEO/GM") + ". Submit a deletion request?")) return;
+      setPending(true);
+      try {
+        var reqBody = {
+          id: "gdel_" + Date.now(),
+          goalId: g.id,
+          goalLabel: g.label,
+          requestedBy: user.id,
+          requestedByName: user.name,
+          requestedByRole: user.role,
+          approverRole: approverRole,
+          status: "pending",
+          reason: "",
+          createdAt: Date.now()
+        };
+        var SUPA_URL = "https://dxlvsnlsvmowzozprlhn.supabase.co";
+        var SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4bHZzbmxzdm1vd3pvenBybGhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1NjA3OTYsImV4cCI6MjA5MDEzNjc5Nn0.oEbGV-kUCj4AkGPGKbIqjnH3KBh_PYxQ-kgFMQe8vn4";
+        await fetch(SUPA_URL + "/rest/v1/sc_goal_deletion_requests", {
+          method: "POST",
+          headers: { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY, "Content-Type": "application/json", "Prefer": "return=representation" },
+          body: JSON.stringify(reqBody)
+        });
+        setRequested(true);
+      } catch(e) {
+        alert("Failed to submit deletion request: " + e.message);
+      }
+      setPending(false);
+      return;
+    }
+    // Direct delete (CEO, GM, or non-restricted cases)
+    if (!window.confirm("Remove this goal?")) return;
+    await fetch(SERVER + "/goals/" + g.id, { method: "DELETE" });
+    if (onDelete) onDelete();
+  };
+
+  if (requested) return React.createElement("span", { style:{fontSize:10,color:C.yellow,flexShrink:0,marginLeft:8} }, "⏳ Approval requested");
+
+  return React.createElement("button", {
+    onClick: handleDelete,
+    disabled: pending,
+    style: { background: "transparent", border: "none", color: needsApproval ? C.yellow : C.red, cursor: "pointer", fontSize: 11, flexShrink: 0, marginLeft: 8 }
+  }, needsApproval ? "⏳ Request Remove" : "✕ Remove");
+}
+
+// ── PendingDeletionsPanel: shown to CEO/GM to approve/reject deletion requests
+function PendingDeletionsPanel({ user, goals, refresh }) {
+  var [requests, setRequests] = React.useState([]);
+  var [loading, setLoading] = React.useState(true);
+  var SUPA_URL = "https://dxlvsnlsvmowzozprlhn.supabase.co";
+  var SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4bHZzbmxzdm1vd3pvenBybGhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1NjA3OTYsImV4cCI6MjA5MDEzNjc5Nn0.oEbGV-kUCj4AkGPGKbIqjnH3KBh_PYxQ-kgFMQe8vn4";
+
+  var load = async function() {
+    setLoading(true);
+    try {
+      var r = await fetch(SUPA_URL + "/rest/v1/sc_goal_deletion_requests?status=eq.pending&select=*&order=createdat.desc", {
+        headers: { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY }
+      });
+      var data = await r.json();
+      setRequests(Array.isArray(data) ? data : []);
+    } catch(e) {}
+    setLoading(false);
+  };
+
+  React.useEffect(function() { load(); }, []);
+
+  var handleAction = async function(req, approve) {
+    try {
+      if (approve) {
+        await fetch(SERVER + "/goals/" + req.goalid, { method: "DELETE" });
+      }
+      await fetch(SUPA_URL + "/rest/v1/sc_goal_deletion_requests?id=eq." + req.id, {
+        method: "PATCH",
+        headers: { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY, "Content-Type": "application/json" },
+        body: JSON.stringify({ status: approve ? "approved" : "rejected", reviewedby: user.id, reviewedat: Date.now() })
+      });
+      await load();
+      if (approve && refresh) refresh();
+    } catch(e) { alert("Action failed: " + e.message); }
+  };
+
+  if (loading) return React.createElement("div", { style:{color:C.muted,fontSize:12,padding:16} }, "Loading deletion requests...");
+  if (requests.length === 0) return null;
+
+  return React.createElement("div", { style:{...S.card, background:"rgba(255,182,39,0.05)", border:"1px solid rgba(255,182,39,0.25)", marginBottom:20} },
+    React.createElement("div", { style:{fontSize:14,fontWeight:800,color:C.yellow,marginBottom:12} }, "⏳ Pending Goal Deletion Requests — "+requests.length),
+    requests.map(function(req) {
+      return React.createElement("div", { key:req.id, style:{background:C.surface,border:"1px solid "+C.border,borderRadius:10,padding:"12px 16px",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center",flexWrap:"wrap",gap:10} },
+        React.createElement("div", null,
+          React.createElement("div", { style:{fontSize:13,fontWeight:700,color:C.text} }, req.goallabel || req.goalid),
+          React.createElement("div", { style:{fontSize:11,color:C.muted,marginTop:2} }, "Requested by: "+req.requestedbyname+" ("+req.requestedbyrole+")"),
+          React.createElement("div", { style:{fontSize:11,color:C.muted} }, "Approver needed: "+req.approverrole)
+        ),
+        React.createElement("div", { style:{display:"flex",gap:8} },
+          React.createElement("button", { onClick:function(){handleAction(req,true);}, style:{...S.btn,padding:"8px 16px",fontSize:12} }, "✅ Approve Delete"),
+          React.createElement("button", { onClick:function(){handleAction(req,false);}, style:{...S.btnDanger,padding:"8px 16px",fontSize:12} }, "❌ Reject")
+        )
+      );
+    })
+  );
+}
+
+// ── CommissionEditor: editable commission structure for CEO/GM/HOS
+function CommissionEditor({ user }) {
+  var SUPA_URL = "https://dxlvsnlsvmowzozprlhn.supabase.co";
+  var SUPA_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImR4bHZzbmxzdm1vd3pvenBybGhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ1NjA3OTYsImV4cCI6MjA5MDEzNjc5Nn0.oEbGV-kUCj4AkGPGKbIqjnH3KBh_PYxQ-kgFMQe8vn4";
+  var [config, setConfig] = React.useState(null);
+  var [history, setHistory] = React.useState([]);
+  var [editing, setEditing] = React.useState(false);
+  var [saving, setSaving] = React.useState(false);
+  var [form, setForm] = React.useState({});
+  var [notes, setNotes] = React.useState("");
+  var [saved, setSaved] = React.useState(false);
+
+  var load = async function() {
+    try {
+      var r = await fetch(SUPA_URL + "/rest/v1/sc_commission_config?select=*&order=effectivefrom.desc&limit=10", {
+        headers: { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY }
+      });
+      var data = await r.json();
+      if (Array.isArray(data) && data.length > 0) {
+        setConfig(data[0]);
+        setHistory(data);
+        setForm({
+          gold_rate: data[0].gold_rate, silver_rate: data[0].silver_rate,
+          bronze_rate: data[0].bronze_rate, upsell_bonus: data[0].upsell_bonus,
+          repeat_bonus: data[0].repeat_bonus, referral_bonus: data[0].referral_bonus,
+          social_flat_rate: data[0].social_flat_rate
+        });
+      }
+    } catch(e) {}
+  };
+
+  React.useEffect(function() { load(); }, []);
+
+  var save = async function() {
+    setSaving(true);
+    try {
+      var newConfig = {
+        id: "config_" + Date.now(),
+        gold_rate: +form.gold_rate, silver_rate: +form.silver_rate,
+        bronze_rate: +form.bronze_rate,
+        gold_threshold: 90, silver_threshold: 65, bronze_threshold: 50,
+        upsell_bonus: +form.upsell_bonus, repeat_bonus: +form.repeat_bonus,
+        referral_bonus: +form.referral_bonus, social_flat_rate: +form.social_flat_rate,
+        editedby: user.id, editedbyname: user.name,
+        effectivefrom: Date.now(),
+        notes: notes
+      };
+      await fetch(SUPA_URL + "/rest/v1/sc_commission_config", {
+        method: "POST",
+        headers: { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY, "Content-Type": "application/json", "Prefer": "return=representation" },
+        body: JSON.stringify(newConfig)
+      });
+      await load();
+      setEditing(false);
+      setNotes("");
+      setSaved(true);
+      setTimeout(function() { setSaved(false); }, 4000);
+    } catch(e) { alert("Failed to save: " + e.message); }
+    setSaving(false);
+  };
+
+  var fmtTs = function(ts) { return ts ? new Date(ts).toLocaleString("en-NG") : "—"; };
+
+  if (!config) return React.createElement("div", { style:{color:C.muted,fontSize:13,padding:20} }, "Loading commission config...");
+
+  return React.createElement("div", null,
+    saved && React.createElement("div",{style:{background:"rgba(0,229,160,0.1)",border:"1px solid rgba(0,229,160,0.25)",borderRadius:10,padding:"12px 16px",marginBottom:16,fontSize:13,color:C.green,fontWeight:700}},
+      "✅ New commission rates saved! Effective immediately for all new daily logs."
+    ),
+    // Current rates card
+    React.createElement("div",{style:{...S.card,background:"rgba(255,182,39,0.04)",border:"1px solid rgba(255,182,39,0.2)",marginBottom:20}},
+      React.createElement("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}},
+        React.createElement("div",null,
+          React.createElement("div",{style:{fontSize:15,fontWeight:800,color:C.yellow}},"💰 Current Commission Structure"),
+          React.createElement("div",{style:{fontSize:11,color:C.muted,marginTop:3}},"Effective from: "+fmtTs(config.effectivefrom)+" · Last edited by: "+(config.editedbyname||"—"))
+        ),
+        ["ceo","gm","head_sales"].includes(user.role) && React.createElement("button",{onClick:function(){setEditing(!editing);},style:{...S.btnGhost,fontSize:13}},
+          editing ? "✕ Cancel Edit" : "✏️ Edit Rates"
+        )
+      ),
+      // Current values display
+      !editing && React.createElement("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:14}},
+        [
+          {label:"🥇 Gold (90%+)",value:"₦"+config.gold_rate+"/delivered"},
+          {label:"🥈 Silver (65-89%)",value:"₦"+config.silver_rate+"/delivered"},
+          {label:"🥉 Bronze (50-64%)",value:"₦"+config.bronze_rate+"/delivered"},
+          {label:"⚡ Upsell Bonus",value:"₦"+config.upsell_bonus+" each"},
+          {label:"🔁 Repeat Customer",value:"₦"+config.repeat_bonus+" each"},
+          {label:"🤝 Referral",value:"₦"+config.referral_bonus+" each"},
+          {label:"📱 Social Media Flat",value:"₦"+config.social_flat_rate+"/delivered"},
+        ].map(function(item) {
+          return React.createElement("div",{key:item.label,style:{background:C.surface,borderRadius:10,padding:"12px 14px"}},
+            React.createElement("div",{style:{fontSize:11,color:C.muted,marginBottom:4}},item.label),
+            React.createElement("div",{style:{fontSize:16,fontWeight:800,color:C.text}},item.value)
+          );
+        })
+      ),
+      // Edit form
+      editing && React.createElement("div",null,
+        React.createElement("div",{style:{background:"rgba(255,182,39,0.08)",border:"1px solid rgba(255,182,39,0.2)",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:12,color:C.yellow}},
+          "⚠️ Important: New rates only apply to daily logs submitted AFTER you save. All existing approved logs keep their original commission amounts."
+        ),
+        React.createElement("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}},
+          [
+            {key:"gold_rate",label:"🥇 Gold Rate (₦ per delivered, at 90%+)"},
+            {key:"silver_rate",label:"🥈 Silver Rate (₦ per delivered, at 65-89%)"},
+            {key:"bronze_rate",label:"🥉 Bronze Rate (₦ per delivered, at 50-64%)"},
+            {key:"upsell_bonus",label:"⚡ Upsell Bonus (₦ each)"},
+            {key:"repeat_bonus",label:"🔁 Repeat Customer Bonus (₦ each)"},
+            {key:"referral_bonus",label:"🤝 Referral Bonus (₦ each)"},
+            {key:"social_flat_rate",label:"📱 Social Media Flat Rate (₦ per delivered)"},
+          ].map(function(f) {
+            return React.createElement("div",{key:f.key},
+              React.createElement("label",{style:S.label},f.label),
+              React.createElement("input",{
+                type:"number",min:"0",style:S.input,
+                value:form[f.key]||"",
+                onChange:function(e){ var nf=Object.assign({},form); nf[f.key]=e.target.value; setForm(nf); }
+              })
+            );
+          })
+        ),
+        React.createElement("div",{style:{marginBottom:14}},
+          React.createElement("label",{style:S.label},"Reason for change (optional)"),
+          React.createElement("input",{style:S.input,placeholder:"e.g. Q2 2026 rate review",value:notes,onChange:function(e){setNotes(e.target.value);}})
+        ),
+        React.createElement("button",{onClick:save,disabled:saving,style:{...S.btn,opacity:saving?0.6:1}},
+          saving ? "Saving..." : "💾 Save New Commission Structure"
+        )
+      )
+    ),
+    // History
+    history.length > 1 && React.createElement("div",{style:S.card},
+      React.createElement("div",{style:{fontSize:13,fontWeight:800,color:C.text,marginBottom:14}},"📋 Commission History"),
+      React.createElement("table",{style:{width:"100%",borderCollapse:"collapse"}},
+        React.createElement("thead",null,
+          React.createElement("tr",null,
+            ["Effective From","Gold","Silver","Bronze","Upsell","Edited By","Notes"].map(function(h){
+              return React.createElement("th",{key:h,style:S.th},h);
+            })
+          )
+        ),
+        React.createElement("tbody",null,
+          history.map(function(c,i){
+            return React.createElement("tr",{key:c.id,style:{opacity:i===0?1:0.7}},
+              React.createElement("td",{style:S.td},fmtTs(c.effectivefrom)+(i===0?" (current)":"")),
+              React.createElement("td",{style:S.td},"₦"+c.gold_rate),
+              React.createElement("td",{style:S.td},"₦"+c.silver_rate),
+              React.createElement("td",{style:S.td},"₦"+c.bronze_rate),
+              React.createElement("td",{style:S.td},"₦"+c.upsell_bonus),
+              React.createElement("td",{style:S.td},c.editedbyname||"—"),
+              React.createElement("td",{style:S.td},c.notes||"—")
+            );
+          })
+        )
+      )
+    )
+  );
 }
 
 // ── GoalTrackerPanel: shown in TeamLead + Management — segmented view
@@ -2426,14 +2938,7 @@ function GoalTrackerPanel(props) {
           React.createElement("div", { style: { fontSize: 13, fontWeight: 700, color: C.text, marginBottom: 3 } }, g.label),
           React.createElement("div", { style: { fontSize: 10, color: C.muted } }, typeIcon + " " + ({ delivered:"Orders Delivered", conversion:"Conversion %", calls:"Calls Logged", upsells:"Upsells", earnings:"Commission ₦" }[g.type] || g.type) + "  ·  Set by " + setByName)
         ),
-        canDelete(g) && React.createElement("button", {
-          onClick: function() {
-            if (!window.confirm("Remove this goal?")) return;
-            fetch(SERVER + "/goals/" + g.id, { method: "DELETE" })
-              .then(function() { if (props.onDelete) props.onDelete(); });
-          },
-          style: { background: "transparent", border: "none", color: C.red, cursor: "pointer", fontSize: 11, flexShrink: 0, marginLeft: 8 }
-        }, "✕ Remove")
+        canDelete(g) && React.createElement(GoalDeleteButton, { g: g, user: user, users: users, onDelete: props.onDelete })
       ),
       React.createElement(GoalBar, { g: g, current: current })
     );
