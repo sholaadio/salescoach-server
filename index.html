@@ -2967,7 +2967,16 @@ function GoalTrackerPanel(props) {
   };
 
   var canDelete = function(g) {
-    return g.setBy === user.id || user.role === "ceo" || user.role === "gm";
+    if (user.role === "ceo" || user.role === "gm") return true;
+    if (g.setBy === user.id) return true;
+    // HOS can also remove TL-set individual goals directly
+    if (user.role === "head_sales") {
+      var gUserId = g.userId || "";
+      var setByUser = users[g.setBy];
+      if (setByUser && setByUser.role === "teamlead" &&
+          gUserId !== "company" && gUserId.indexOf("team:") !== 0) return true;
+    }
+    return false;
   };
 
   // Single goal card
