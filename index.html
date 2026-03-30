@@ -2596,30 +2596,63 @@ function GoalProgress(props) {
 }
 
 
-// ── GoalDeleteButton: approval-aware delete
+// ── GoalDeleteButton: approval-aware delete with correct role rules
+// Rules:
+// TL: can only request remove on goals THEY set for individuals on their team
+// HOS: can request remove on goals THEY set for teams OR individuals in any team
+//      HOS can also directly remove goals set by TL for individuals (no approval needed)
+// CEO/GM: direct delete on any goal, no approval
 function GoalDeleteButton({ g, user, users, onDelete }) {
   var [pending, setPending] = React.useState(false);
   var [requested, setRequested] = React.useState(false);
 
-  // Determine if this deletion needs approval
+  var gUserId = g.userId || "";
+  var setByMe = g.setBy === user.id;
+
+  // Determine visibility — can this user even see a delete/request button?
+  var canAct = false;
   var needsApproval = false;
   var approverRole = null;
 
-  if (user.role === "teamlead") {
-    // TL deleting an individual goal → needs HOS approval
-    var gUserId = g.userId || "";
-    if (gUserId !== "company" && gUserId.indexOf("team:") !== 0 && gUserId) {
-      needsApproval = true;
-      approverRole = "head_sales";
-    }
+  if (user.role === "ceo" || user.role === "gm") {
+    // CEO/GM: can delete ANY goal directly
+    canAct = true;
+    needsApproval = false;
+
   } else if (user.role === "head_sales") {
-    // HOS deleting a team goal → needs CEO/GM approval
-    var gUserId2 = g.userId || "";
-    if (gUserId2.indexOf("team:") === 0) {
-      needsApproval = true;
-      approverRole = "ceo";
+    // HOS: can act on goals they set (team or individual)
+    // Also can directly delete goals set by TL for individuals (overrides)
+    if (setByMe) {
+      canAct = true;
+      // HOS goals for teams need CEO/GM approval to remove
+      if (gUserId.indexOf("team:") === 0) {
+        needsApproval = true;
+        approverRole = "ceo";
+      }
+      // HOS goals for individuals — direct delete
+    } else {
+      // HOS can remove TL-set individual goals directly (no approval)
+      var setByUser = users[g.setBy];
+      if (setByUser && setByUser.role === "teamlead" &&
+          gUserId !== "company" && gUserId.indexOf("team:") !== 0) {
+        canAct = true;
+        needsApproval = false;
+      }
+    }
+
+  } else if (user.role === "teamlead") {
+    // TL: can ONLY request remove on goals THEY set for individuals on their own team
+    if (setByMe && gUserId !== "company" && gUserId.indexOf("team:") !== 0 && gUserId) {
+      var targetUser = users[gUserId];
+      if (targetUser && targetUser.teamId === user.teamId) {
+        canAct = true;
+        needsApproval = true;
+        approverRole = "head_sales";
+      }
     }
   }
+
+  if (!canAct) return null;
 
   var handleDelete = async function() {
     if (needsApproval) {
