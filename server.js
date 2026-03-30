@@ -466,64 +466,46 @@ Return this exact JSON structure:
   } catch(e) { res.status(500).json({ error: "Analysis failed: " + e.message }); }
 });
 
-// ── /analyze-resources — SLOW path: books, YouTube, podcasts
-// Called separately AFTER the main result is already shown to the user.
-// Uses Sonnet for better resource quality. Mobile calls this in background.
-app.post("/analyze-resources", async function(req, res) {
-  try {
-    const { weaknesses, closerName } = req.body;
-    if (!weaknesses || !weaknesses.length) return res.status(400).json({ error: "No weaknesses provided." });
-    if (!ANTHROPIC_KEY) return res.status(500).json({ error: "Anthropic key missing." });
-
-    const prompt = `You are a Nigerian sales training coach. Based on these weaknesses for closer ${closerName || "the closer"}:
-${weaknesses.map(function(w, i) { return (i+1) + ". " + w; }).join("\n")}
-
-Return ONLY valid JSON — no markdown, no backticks, no explanation:
-{
-  "resources": {
-    "books": [
-      {"title": "<book title and author>", "reason": "<why it helps>", "link": "<real Amazon URL>"},
-      {"title": "<book title and author>", "reason": "<why it helps>", "link": "<real Amazon URL>"}
-    ],
-    "youtube": [
-      {"title": "<real YouTube video title>", "reason": "<why it helps>", "videoId": "<real 11-char video ID>"},
-      {"title": "<real YouTube video title>", "reason": "<why it helps>", "videoId": "<real 11-char video ID>"}
-    ],
-    "podcasts": [
-      {"title": "<episode title>", "show": "<show name>", "reason": "<why it helps>", "link": "<real Spotify URL>"},
-      {"title": "<episode title>", "show": "<show name>", "reason": "<why it helps>", "link": "<real Spotify URL>"}
-    ]
-  }
-}`;
-
-    const r = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01" },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1200,
-        messages: [{ role: "user", content: prompt }]
-      })
-    });
-    const data = await r.json();
-    if (!r.ok) return res.status(r.status).json({ error: data.error ? data.error.message : "Claude error." });
-    const text = data.content.map(function(b) { return b.text || ""; }).join("").replace(/```json|```/g, "").trim();
-    res.json(JSON.parse(text));
-  } catch(e) { res.status(500).json({ error: "Resources failed: " + e.message }); }
+// /analyze-resources is deprecated — resources now live in /analyze-summary
+// Keeping stub so any old mobile calls don't error
+app.post("/analyze-resources", function(req, res) {
+  res.json({ resources: { books: [], youtube: [], podcasts: [] }, deprecated: true });
 });
 
+// ── /analyze-summary — AI Summary with resources
+// Builds a full coaching report PLUS curated resource recommendations
+// based on consistent weaknesses across multiple calls.
+// Resources here are far more meaningful than per-call recommendations.
 app.post("/analyze-summary", async function(req, res) {
   try {
     const { prompt } = req.body;
     if (!prompt) return res.status(400).json({ error: "No prompt." });
     if (!ANTHROPIC_KEY) return res.status(500).json({ error: "Anthropic key missing." });
+
+    // Append resources instruction to whatever prompt the frontend sends
+    const fullPrompt = prompt + `
+
+Also include a "resources" key in your JSON with the best 2 picks from each category below for this closer's weaknesses.
+Pick based on their criticalWeaknesses. Return resources inside the same JSON object.
+
+BOOKS:
+${JSON.stringify(RESOURCE_LIBRARY.books)}
+
+YOUTUBE:
+${JSON.stringify(RESOURCE_LIBRARY.youtube)}
+
+PODCASTS:
+${JSON.stringify(RESOURCE_LIBRARY.podcasts)}
+
+Add to your JSON: "resources": { "books": [2 items], "youtube": [2 items], "podcasts": [2 items] }`;
+
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-haiku-4-5-20251001",
         max_tokens: 2000,
-        messages: [{ role: "user", content: prompt }]
+        messages: [{ role: "user", content: fullPrompt }]
       })
     });
     const data = await r.json();
