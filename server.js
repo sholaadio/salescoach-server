@@ -409,6 +409,8 @@ app.post("/transcribe", upload.single("audio"), async function(req, res) {
   }
 });
 
+// ── /analyze — FAST path: scores, verdict, coaching only (no resources)
+// Returns in ~8-12 sec. Resources are fetched separately via /analyze-resources.
 app.post("/analyze", async function(req, res) {
   try {
     const t = req.body;
@@ -445,57 +447,15 @@ Return this exact JSON structure:
   "weaknesses": ["<specific weakness 1>", "<specific weakness 2>", "<specific weakness 3>"],
   "improvements": ["<actionable step with example dialogue>", "<actionable step>", "<actionable step>"],
   "transcriptInsight": "<the single most critical missed moment and exactly what should have been said>",
-  "scriptSuggestion": "<a 3-5 line script in natural Nigerian sales English they can memorize>",
-  "resources": {
-    "books": [
-      {
-        "title": "<exact book title and author>",
-        "reason": "<why this specific book helps with their weakness>",
-        "link": "<real Amazon or Google Books purchase URL for this exact book>"
-      },
-      {
-        "title": "<exact book title and author>",
-        "reason": "<why this book helps>",
-        "link": "<real Amazon purchase URL>"
-      }
-    ],
-    "youtube": [
-      {
-        "title": "<exact title of a real YouTube video that exists>",
-        "reason": "<why this video helps with their specific weakness>",
-        "videoId": "<the actual 11-character YouTube video ID, e.g. dQw4w9WgXcQ>"
-      },
-      {
-        "title": "<exact title of a real YouTube video>",
-        "reason": "<why this video helps>",
-        "videoId": "<actual 11-character YouTube video ID>"
-      }
-    ],
-    "podcasts": [
-      {
-        "title": "<exact podcast episode title>",
-        "show": "<podcast show name>",
-        "reason": "<why this episode helps>",
-        "link": "<real Spotify or Apple Podcasts URL for this episode>"
-      },
-      {
-        "title": "<exact podcast episode title>",
-        "show": "<podcast show name>",
-        "reason": "<why this helps>",
-        "link": "<real Spotify or Apple Podcasts URL>"
-      }
-    ]
-  }
-}
-
-IMPORTANT: For YouTube, provide REAL video IDs of videos that actually exist on YouTube about sales training. For books, use real Amazon links. For podcasts, use real Spotify links. Be specific and accurate.`;
+  "scriptSuggestion": "<a 3-5 line script in natural Nigerian sales English they can memorize>"
+}`;
 
     const r = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 2000,
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 1200,
         messages: [{ role: "user", content: prompt }]
       })
     });
@@ -504,6 +464,52 @@ IMPORTANT: For YouTube, provide REAL video IDs of videos that actually exist on 
     const text = data.content.map(function(b) { return b.text || ""; }).join("").replace(/```json|```/g, "").trim();
     res.json({ analysis: JSON.parse(text) });
   } catch(e) { res.status(500).json({ error: "Analysis failed: " + e.message }); }
+});
+
+// ── /analyze-resources — SLOW path: books, YouTube, podcasts
+// Called separately AFTER the main result is already shown to the user.
+// Uses Sonnet for better resource quality. Mobile calls this in background.
+app.post("/analyze-resources", async function(req, res) {
+  try {
+    const { weaknesses, closerName } = req.body;
+    if (!weaknesses || !weaknesses.length) return res.status(400).json({ error: "No weaknesses provided." });
+    if (!ANTHROPIC_KEY) return res.status(500).json({ error: "Anthropic key missing." });
+
+    const prompt = `You are a Nigerian sales training coach. Based on these weaknesses for closer ${closerName || "the closer"}:
+${weaknesses.map(function(w, i) { return (i+1) + ". " + w; }).join("\n")}
+
+Return ONLY valid JSON — no markdown, no backticks, no explanation:
+{
+  "resources": {
+    "books": [
+      {"title": "<book title and author>", "reason": "<why it helps>", "link": "<real Amazon URL>"},
+      {"title": "<book title and author>", "reason": "<why it helps>", "link": "<real Amazon URL>"}
+    ],
+    "youtube": [
+      {"title": "<real YouTube video title>", "reason": "<why it helps>", "videoId": "<real 11-char video ID>"},
+      {"title": "<real YouTube video title>", "reason": "<why it helps>", "videoId": "<real 11-char video ID>"}
+    ],
+    "podcasts": [
+      {"title": "<episode title>", "show": "<show name>", "reason": "<why it helps>", "link": "<real Spotify URL>"},
+      {"title": "<episode title>", "show": "<show name>", "reason": "<why it helps>", "link": "<real Spotify URL>"}
+    ]
+  }
+}`;
+
+    const r = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": ANTHROPIC_KEY, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-20250514",
+        max_tokens: 1200,
+        messages: [{ role: "user", content: prompt }]
+      })
+    });
+    const data = await r.json();
+    if (!r.ok) return res.status(r.status).json({ error: data.error ? data.error.message : "Claude error." });
+    const text = data.content.map(function(b) { return b.text || ""; }).join("").replace(/```json|```/g, "").trim();
+    res.json(JSON.parse(text));
+  } catch(e) { res.status(500).json({ error: "Resources failed: " + e.message }); }
 });
 
 app.post("/analyze-summary", async function(req, res) {
