@@ -2737,6 +2737,7 @@ function CommissionEditor({ user }) {
   var [saved, setSaved] = React.useState(false);
 
   var load = async function() {
+    var defaults = { gold_rate:200, silver_rate:150, bronze_rate:100, upsell_bonus:600, repeat_bonus:300, referral_bonus:300, social_flat_rate:200 };
     try {
       var r = await fetch(SUPA_URL + "/rest/v1/sc_commission_config?select=*&order=effectivefrom.desc&limit=10", {
         headers: { "apikey": SUPA_KEY, "Authorization": "Bearer " + SUPA_KEY }
@@ -2751,8 +2752,17 @@ function CommissionEditor({ user }) {
           repeat_bonus: data[0].repeat_bonus, referral_bonus: data[0].referral_bonus,
           social_flat_rate: data[0].social_flat_rate
         });
+      } else {
+        // No rows yet — show defaults
+        setConfig(Object.assign({ id:"default", editedbyname:"System", effectivefrom: Date.now(), notes:"Default rates" }, defaults));
+        setHistory([]);
+        setForm(defaults);
       }
-    } catch(e) {}
+    } catch(e) {
+      // Fetch failed — show defaults so page is not blank
+      setConfig(Object.assign({ id:"default", editedbyname:"System", effectivefrom: Date.now(), notes:"Default rates" }, defaults));
+      setForm(defaults);
+    }
   };
 
   React.useEffect(function() { load(); }, []);
